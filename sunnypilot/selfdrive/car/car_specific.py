@@ -14,6 +14,7 @@ from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 
 EventName = log.OnroadEvent.EventName
 EventNameSP = custom.OnroadEventSP.EventName
+ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 
 
@@ -23,6 +24,9 @@ class CarSpecificEventsSP:
     self.CP_SP = CP_SP
 
     self.low_speed_alert = False
+    self._rivian_up2_active = False
+    self._rivian_prev_in_park = False
+    self._rivian_park_disable_pending = False
 
   def update(self, CS: structs.CarState, events: Events):
     events_sp = EventsSP()
@@ -47,5 +51,42 @@ class CarSpecificEventsSP:
         if CS.cruiseState.standstill and not CS.brakePressed and self.CP_SP.enableGasInterceptor:
           if events.has(EventName.resumeRequired):
             events.remove(EventName.resumeRequired)
+
+    elif self.CP.brand == 'rivian':
+      in_park = CS.gearShifter == GearShifter.park
+      for be in CS.buttonEvents:
+        if be.type == ButtonType.altButton2:
+          self._rivian_up2_active = be.pressed
+          # UP_2 is a full-cancel gesture: disengage MADS lateral so it doesn't
+          # persist in Mode B after ACC cancels. lkasDisable is ET.USER_DISABLE
+          # and works from any active MADS state (enabled, overriding, etc.).
+          if be.pressed:
+            events_sp.add(EventNameSP.lkasDisable)
+      # Park entry: full MADS disengage, same as UP_2.
+      if in_park and not self._rivian_prev_in_park:
+        events_sp.add(EventNameSP.lkasDisable)
+        self._rivian_park_disable_pending = True
+      elif in_park and self._rivian_park_disable_pending:
+        # HACK: fire lkasDisable a second time so that State.disabled wins over State.paused.
+        # On frame N, wrongGear fires concurrently and mads.update_events() calls
+        # transition_paused_state() → silentLkasDisable; the state machine then sees both
+        # silentLkasDisable and lkasDisable and (currently) lets silentLkasDisable win →
+        # State.paused instead of State.disabled. On frame N+1 the state is already paused
+        # so transition_paused_state() is a no-op, silentLkasDisable is not re-emitted, and
+        # the lone lkasDisable drives the state to State.disabled as intended.
+        #
+        # Clean general fix: in sunnypilot/mads/state.py change the USER_DISABLE branch so
+        # that lkasDisable (explicit) takes priority over silentLkasDisable (implicit) and
+        # always yields State.disabled. Rivian-specific alternative: a new event type (e.g.
+        # hardLkasDisable) that unconditionally maps to State.disabled without checking for
+        # silentLkasDisable. Both approaches would not be Rivian-specific.
+        events_sp.add(EventNameSP.lkasDisable)
+        self._rivian_park_disable_pending = False
+      if not in_park:
+        self._rivian_park_disable_pending = False
+      self._rivian_prev_in_park = in_park
+      # Suppress pcmEnable while UP_2 is held or in park.
+      if self._rivian_up2_active or in_park:
+        events.remove(EventName.pcmEnable)
 
     return events_sp
