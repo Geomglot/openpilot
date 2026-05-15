@@ -148,7 +148,7 @@ class MadsSettingsLayout(Widget):
       self._steering_mode.action_item.set_enabled_buttons(None)
 
       if self._main_cruise_forced_off():
-        ui_state.params.remove("MadsMainCruiseAllowed")
+        ui_state.params.put_bool("MadsMainCruiseAllowed", False)
         self._main_cruise_toggle.action_item.set_enabled(False)
         self._main_cruise_toggle.action_item.set_state(False)
         self._main_cruise_toggle.set_description("<b>" + DEFAULT_TO_OFF + "</b><br>" + MADS_MAIN_CRUISE_BASE_DESC)
