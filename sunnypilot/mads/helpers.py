@@ -69,4 +69,7 @@ def set_car_specific_params(CP: structs.CarParams, CP_SP: structs.CarParamsSP, p
 
   # no ACC MAIN button for these brands
   if CP.brand in MADS_NO_ACC_MAIN_BUTTON:
-    params.remove("MadsMainCruiseAllowed")
+    if CP.brand == "rivian":
+      params.put_bool("MadsMainCruiseAllowed", False)
+    else:
+      params.remove("MadsMainCruiseAllowed")
