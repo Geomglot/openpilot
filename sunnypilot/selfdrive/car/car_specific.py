@@ -9,7 +9,9 @@ from cereal import log, custom
 from opendbc.car import structs
 
 from opendbc.car.chrysler.values import RAM_DT
+from openpilot.common.params import Params
 from openpilot.selfdrive.selfdrived.events import Events
+from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 
 EventName = log.OnroadEvent.EventName
@@ -27,6 +29,8 @@ class CarSpecificEventsSP:
     self._rivian_up2_active = False
     self._rivian_prev_in_park = False
     self._rivian_park_disable_pending = False
+    if self.CP.brand == 'rivian':
+      self._rivian_steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, Params())
 
   def update(self, CS: structs.CarState, events: Events):
     events_sp = EventsSP()
@@ -88,4 +92,13 @@ class CarSpecificEventsSP:
       # Suppress pcmEnable while UP_2 is held or in park.
       if self._rivian_up2_active or in_park:
         events.remove(EventName.pcmEnable)
+
+      # PAUSE mode: keep MADS lateral paused for the full duration of a brake press.
+      # Emitting silentLkasDisable (ET.USER_DISABLE) every frame beats the
+      # silentLkasEnable (ET.ENABLE) that mads.py adds, because ET.USER_DISABLE is
+      # checked first in the MADS state machine. This fixes both the standstill
+      # case (where pedalPressed event stops firing) and Mode A (ACC+MADS active).
+      if CS.brakePressed and self._rivian_steering_mode_on_brake == MadsSteeringModeOnBrake.PAUSE:
+        events_sp.add(EventNameSP.silentLkasDisable)
+
     return events_sp
