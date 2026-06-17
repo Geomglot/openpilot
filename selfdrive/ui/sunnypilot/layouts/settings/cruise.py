@@ -108,7 +108,7 @@ class CruiseLayout(Widget):
       title=tr("Following Distance Offset"),
       description=tr("Scales the time-gap to the lead car across all personality modes. "
                      "Negative = follow closer; positive = follow further. "
-                     "Takes effect after the next drive."),
+                     "Takes effect after changing from OffRoad to OnRoad."),
       param="SPFollowingTimeOffset",
       min_value=-20,
       max_value=20,

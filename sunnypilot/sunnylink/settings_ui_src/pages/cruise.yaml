@@ -56,7 +56,7 @@ sections:
     description: >-
       Scales the time-gap to the lead car across all personality modes (−20% to +20%).
       Negative values follow closer; positive values follow further. Default is 0 (no change).
-      Takes effect after the next drive.
+      Takes effect after changing from OffRoad to OnRoad.
     min: -20
     max: 20
     step: 5
