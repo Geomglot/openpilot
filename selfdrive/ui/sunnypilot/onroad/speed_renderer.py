@@ -26,7 +26,13 @@ class SpeedRenderer:
     car_state = ui_state.sm['carState']
     v_ego_cluster = car_state.vEgoCluster
     self.v_ego_cluster_seen = self.v_ego_cluster_seen or v_ego_cluster != 0.0
-    v_ego = v_ego_cluster if self.v_ego_cluster_seen and not ui_state.true_v_ego_ui else car_state.vEgo
+    if self.v_ego_cluster_seen and not ui_state.true_v_ego_ui:
+      v_ego = v_ego_cluster
+    elif ui_state.live_speed_correction:
+      offset_ms = ui_state.cruise_speed_offset_kph * CV.KPH_TO_MS
+      v_ego = max(0.0, car_state.vEgo - offset_ms)
+    else:
+      v_ego = car_state.vEgo
     speed_conversion = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
     self.speed = max(0.0, v_ego * speed_conversion)
 

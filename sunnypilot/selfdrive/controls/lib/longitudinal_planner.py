@@ -8,6 +8,8 @@ See the LICENSE.md file in the root directory for more details.
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
+from openpilot.common.gps import get_gps_location_service
+from openpilot.common.params import Params
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
 from openpilot.sunnypilot.selfdrive.controls.lib.e2e_alerts_helper import E2EAlertsHelper
@@ -36,6 +38,20 @@ class LongitudinalPlannerSP:
     self.output_v_target = 0.
     self.output_a_target = 0.
 
+    self.live_speed_correction = False
+    self.cruise_speed_offset_ms = 0.0
+    self._spd_ewa = 0.0
+    self._spd_samples = 0
+    self._gps_service = 'gpsLocation'
+
+    if CP.openpilotLongitudinalControl:
+      _params = Params()
+      self.live_speed_correction = _params.get_bool("SPLiveSpeedCorrectionEnabled")
+      raw_offset = int(_params.get("SPCruiseSpeedOffset") or "0")
+      self.cruise_speed_offset_ms = max(-5, min(5, raw_offset)) * CV.KPH_TO_MS
+      self._spd_ewa = float(raw_offset)
+      self._gps_service = get_gps_location_service(_params)
+
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
     if not self.dec.active():
@@ -44,6 +60,8 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def update_targets(self, sm: messaging.SubMaster, v_ego: float, a_ego: float, v_cruise: float) -> tuple[float, float]:
+    v_cruise = max(0.0, v_cruise + self.cruise_speed_offset_ms)
+
     CS = sm['carState']
     v_cruise_cluster_kph = min(CS.vCruiseCluster, V_CRUISE_MAX)
     v_cruise_cluster = v_cruise_cluster_kph * CV.KPH_TO_MS
@@ -88,6 +106,38 @@ class LongitudinalPlannerSP:
     self.events_sp.clear()
     self.dec.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)
+    if self.live_speed_correction:
+      self._update_speed_learner(sm)
+
+  def _update_speed_learner(self, sm: messaging.SubMaster) -> None:
+    CS = sm['carState']
+    if not sm.valid[self._gps_service]:
+      return
+    gps = sm[self._gps_service]
+    if gps.speed <= 0:
+      return
+
+    gps_speed_ms = gps.speed
+    gps_accuracy_ms = gps.speedAccuracy
+
+    if (gps_accuracy_ms > 0.5 or
+        gps_speed_ms < 8.0 or
+        abs(CS.aEgo) > 0.3 or
+        abs(CS.steeringAngleDeg) > 5.0 or
+        not sm['carControl'].enabled):
+      return
+
+    wheel_offset_kph = (CS.vEgo - gps_speed_ms) * CV.MS_TO_KPH
+
+    alpha = 0.005
+    self._spd_ewa = (1 - alpha) * self._spd_ewa + alpha * wheel_offset_kph
+    self._spd_samples += 1
+
+    if self._spd_samples % 50 == 0:
+      learned_offset = int(round(self._spd_ewa))
+      learned_offset = max(-5, min(5, learned_offset))
+      Params().put_int("SPCruiseSpeedOffset", learned_offset)
+      self.cruise_speed_offset_ms = learned_offset * CV.KPH_TO_MS
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')

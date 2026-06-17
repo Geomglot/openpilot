@@ -634,6 +634,48 @@
                   }
                 }
               ]
+            },
+            {
+              "key": "SPLiveSpeedCorrectionEnabled",
+              "widget": "toggle",
+              "title": "Live Learning Speed Correction",
+              "description": "Allow device to learn and adapt cruise speed to match GPS speed. Compares wheel speed to GPS during steady highway cruise to learn any systematic offset. Also corrects the Always Display True Speed display when both are enabled. Takes effect after changing from OffRoad to OnRoad.",
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                },
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "SPCruiseSpeedOffset",
+              "widget": "option",
+              "title": "Speed Correction Offset",
+              "description": "Learned offset between wheel speed and GPS speed (kph/mph). Positive = wheel reads high. Typically 0 for standard tyres. Updated automatically during highway cruise when live learning is enabled. Takes effect after changing from OffRoad to OnRoad.",
+              "min": -5,
+              "max": 5,
+              "step": 1,
+              "visibility": [
+                {
+                  "type": "param",
+                  "key": "SPLiveSpeedCorrectionEnabled",
+                  "equals": true
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                },
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
             }
           ]
         },

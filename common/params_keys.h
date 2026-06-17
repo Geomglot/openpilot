@@ -272,6 +272,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SmartCruiseControlVision", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"CurveSpeedControl", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Live-learning cruise speed correction
+    {"SPLiveSpeedCorrectionEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"SPCruiseSpeedOffset",          {PERSISTENT | BACKUP, INT,  "0"}},
+
     // Torque lateral control custom params
     {"CustomTorqueParams", {PERSISTENT | BACKUP , BOOL}},
     {"EnforceTorqueControl", {PERSISTENT | BACKUP, BOOL}},
