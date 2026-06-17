@@ -44,6 +44,10 @@ class CarStateExt:
     self._prev_stalk_down2: bool = False
     self._prev_stalk_down: bool = False
     self._frames_since_acc_on: int = 0
+    self._increase_long_pressed: bool = False
+    self._decrease_long_pressed: bool = False
+    raw_offset = int(Params().get("RivianCruiseButtonOffset") or "0")
+    self.cruise_button_offset = max(0, min(6, raw_offset))
 
   def update_stalk_controls(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> list:
     cp = can_parsers[Bus.pt]
@@ -107,17 +111,24 @@ class CarStateExt:
       long_press_step = 10.0 if metric else 5.0
       set_speed_converted = self.set_speed * (CV.MS_TO_KPH if metric else CV.MS_TO_MPH)
 
+      offset = self.cruise_button_offset
       if self.increase_button:
         if self.increase_counter % 66 == 0:
-          self.set_speed = (int(math.ceil((set_speed_converted + 1) / long_press_step)) * long_press_step) * conversion
-        elif not prev_increase_button:
+          self._increase_long_pressed = True
+          self.set_speed = (int(math.ceil((set_speed_converted + 1 - offset) / long_press_step)) * long_press_step + offset) * conversion
+      elif prev_increase_button:
+        if not self._increase_long_pressed:
           self.set_speed += conversion
+        self._increase_long_pressed = False
 
       if self.decrease_button:
         if self.decrease_counter % 66 == 0:
-          self.set_speed = (int(math.floor((set_speed_converted - 1) / long_press_step)) * long_press_step) * conversion
-        elif not prev_decrease_button:
+          self._decrease_long_pressed = True
+          self.set_speed = (int(math.floor((set_speed_converted - 1 - offset) / long_press_step)) * long_press_step + offset) * conversion
+      elif prev_decrease_button:
+        if not self._decrease_long_pressed:
           self.set_speed -= conversion
+        self._decrease_long_pressed = False
 
       # VDM_UserAdasRequest: 0=IDLE, 1=UP_1, 2=UP_2, 3=DOWN_1, 4=DOWN_2
       vdm_request = int(cp.vl["VDM_AdasSts"]["VDM_UserAdasRequest"])

@@ -31,6 +31,12 @@ ACC_PCMCRUISE_DISABLED_DESCRIPTION = tr_noop("This feature is not supported on t
 ONROAD_ONLY_DESCRIPTION = tr_noop("Start the vehicle to check vehicle compatibility.")
 
 
+def _rivian_button_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return str(v)
+
+
 class CruiseLayout(Widget):
   def __init__(self):
     super().__init__()
@@ -98,6 +104,16 @@ class CruiseLayout(Widget):
       description=tr('When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: "Set to speed limit on divided highways", which uses the same activation mechanism.'),
       param="RivianResumeEnabled")
 
+    self.rivian_button_offset = option_item_sp(
+      title=tr("Rivian: Cruise Button Offset"),
+      description="",
+      param="RivianCruiseButtonOffset",
+      min_value=0,
+      max_value=6,
+      value_change_step=1,
+      label_callback=_rivian_button_offset_label,
+      inline=True)
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
@@ -108,6 +124,7 @@ class CruiseLayout(Widget):
       self.custom_acc_short_increment,
       self.custom_acc_long_increment,
       self.rivian_resume_toggle,
+      self.rivian_button_offset,
       self.sla_settings_button,
     ]
     return items
@@ -175,11 +192,27 @@ class CruiseLayout(Widget):
       if not is_rivian_long:
         ui_state.params.remove("RivianResumeEnabled")
 
+      self.rivian_button_offset.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
+      if not is_rivian_long:
+        ui_state.params.remove("RivianCruiseButtonOffset")
+
+      unit = "kph" if ui_state.is_metric else "mph"
+      range_text = "1–6" if ui_state.is_metric else "1–3"
+      step_text = "10 kph" if ui_state.is_metric else "5 mph"
+      new_btn_desc = tr(f"Shift the long-press cruise snap grid. "
+                        f"Set speed will land on multiples of {step_text} plus this offset. "
+                        f"0 = standard (multiples of {step_text}). "
+                        f"Meaningful range: {range_text} {unit}. "
+                        f"Takes effect after changing from OffRoad to OnRoad.")
+      if self.rivian_button_offset.description != new_btn_desc:
+        self.rivian_button_offset.set_description(new_btn_desc)
+
     else:
       has_icbm = has_long = False
       self.icbm_toggle.action_item.set_enabled(False)
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
       self.rivian_resume_toggle.action_item.set_enabled(False)
+      self.rivian_button_offset.action_item.set_enabled(False)
 
     show_custom_acc_desc = False
 
