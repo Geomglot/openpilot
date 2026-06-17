@@ -106,7 +106,7 @@ class CruiseLayout(Widget):
       title=tr("Minimum Stop Distance"),
       description=tr("Gap behind a stopped lead car (4.5–6.0 m). Default 6.0 m. "
                      "Only active when cruise set speed is ≤50 kph / 32 mph — reverts to 6.0 m above that speed. "
-                     "Takes effect after the next drive."),
+                     "Takes effect after changing from OffRoad to OnRoad."),
       param="SPStopDistance",
       min_value=45,
       max_value=60,
