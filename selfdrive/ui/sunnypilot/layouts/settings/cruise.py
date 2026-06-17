@@ -104,9 +104,11 @@ class CruiseLayout(Widget):
 
     self.stop_distance_option = option_item_sp(
       title=tr("Minimum Stop Distance"),
-      description=tr("Gap to maintain behind a stopped lead car. Default 6.0m. Takes effect after the next drive."),
+      description=tr("Gap behind a stopped lead car (4.5–6.0 m). Default 6.0 m. "
+                     "Only active when cruise set speed is ≤50 kph / 32 mph — reverts to 6.0 m above that speed. "
+                     "Takes effect after the next drive."),
       param="SPStopDistance",
-      min_value=30,
+      min_value=45,
       max_value=60,
       value_change_step=5,
       label_callback=_stop_distance_label,
@@ -115,7 +117,8 @@ class CruiseLayout(Widget):
 
     self.stop_distance_personality = toggle_item_sp(
       title=tr("Link Stop Distance to Personality"),
-      description=tr("When enabled: Aggressive uses the minimum distance above; Standard uses the midpoint; Relaxed always uses 6.0m."),
+      description=tr("When enabled and cruise speed is ≤50 kph / 32 mph: Aggressive uses the minimum distance; "
+                     "Standard uses the midpoint; Relaxed always uses 6.0 m."),
       param="SPStopDistancePersonality")
 
     items = [

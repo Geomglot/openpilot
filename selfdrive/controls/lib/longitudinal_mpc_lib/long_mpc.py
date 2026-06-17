@@ -55,6 +55,8 @@ FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
+STOP_DISTANCE_MAX_V_CRUISE = 50 / 3.6  # ~13.9 m/s — reduced stop distance inactive above this speed
+STOP_DISTANCE_SPEED_EPSILON = 0.5 / 3.6  # ~0.14 m/s tolerance so exactly 50 kph/32 mph passes the gate
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 MIN_X_LEAD_FACTOR = 0.5
@@ -326,15 +328,19 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    if self.personality_linked and self.stop_distance < STOP_DISTANCE:
-      if personality == log.LongitudinalPersonality.aggressive:
+    # Reduced stop distance: only active at low cruise speeds (≤50 kph / ~32 mph)
+    if self.stop_distance < STOP_DISTANCE and v_cruise <= STOP_DISTANCE_MAX_V_CRUISE + STOP_DISTANCE_SPEED_EPSILON:
+      if self.personality_linked:
+        if personality == log.LongitudinalPersonality.aggressive:
+          effective_stop = self.stop_distance
+        elif personality == log.LongitudinalPersonality.standard:
+          effective_stop = (self.stop_distance + STOP_DISTANCE) / 2
+        else:  # relaxed
+          effective_stop = STOP_DISTANCE
+      else:
         effective_stop = self.stop_distance
-      elif personality == log.LongitudinalPersonality.standard:
-        effective_stop = (self.stop_distance + STOP_DISTANCE) / 2
-      else:  # relaxed
-        effective_stop = STOP_DISTANCE
     else:
-      effective_stop = self.stop_distance
+      effective_stop = STOP_DISTANCE
     adjustment = STOP_DISTANCE - effective_stop
     lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1]) + adjustment
     lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1]) + adjustment

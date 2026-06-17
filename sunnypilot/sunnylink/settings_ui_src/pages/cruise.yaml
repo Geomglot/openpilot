@@ -54,9 +54,10 @@ sections:
     widget: option
     title: Minimum Stop Distance
     description: >-
-      Gap behind a stopped lead car, in tenths of a metre (30 = 3.0 m, 60 = 6.0 m).
-      Default is 60 (6.0 m). Takes effect after the next drive.
-    min: 30
+      Gap behind a stopped lead car, in tenths of a metre (45 = 4.5 m, 60 = 6.0 m).
+      Default is 60 (6.0 m). Only active when cruise set speed is ≤50 kph / 32 mph —
+      reverts to 6.0 m above that speed. Takes effect after the next drive.
+    min: 45
     max: 60
     step: 5
     enablement:
@@ -66,8 +67,8 @@ sections:
     widget: toggle
     title: Link Stop Distance to Personality
     description: >-
-      When enabled: Aggressive uses the minimum stop distance; Standard uses the
-      midpoint; Relaxed always uses 6.0 m.
+      When enabled and cruise speed is ≤50 kph / 32 mph: Aggressive uses the minimum
+      stop distance; Standard uses the midpoint; Relaxed always uses 6.0 m.
     enablement:
     - $ref: '#/macros/offroad'
     - $ref: '#/macros/longitudinal'
