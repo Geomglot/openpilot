@@ -266,6 +266,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // Rivian
     {"RivianResumeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Stop Distance
+    {"SPStopDistance",            {PERSISTENT | BACKUP, INT, "60"}},
+    {"SPStopDistancePersonality", {PERSISTENT | BACKUP, BOOL, "0"}},
+
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
     {"SmartCruiseControlMap", {PERSISTENT | BACKUP, BOOL, "0"}},

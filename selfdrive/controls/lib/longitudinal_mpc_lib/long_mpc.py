@@ -219,6 +219,8 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.reset()
     self.source = LongitudinalPlanSource.cruise
+    self.stop_distance = STOP_DISTANCE
+    self.personality_linked = False
 
   def reset(self):
     self.solver.reset()
@@ -324,8 +326,18 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
+    if self.personality_linked and self.stop_distance < STOP_DISTANCE:
+      if personality == log.LongitudinalPersonality.aggressive:
+        effective_stop = self.stop_distance
+      elif personality == log.LongitudinalPersonality.standard:
+        effective_stop = (self.stop_distance + STOP_DISTANCE) / 2
+      else:  # relaxed
+        effective_stop = STOP_DISTANCE
+    else:
+      effective_stop = self.stop_distance
+    adjustment = STOP_DISTANCE - effective_stop
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1]) + adjustment
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1]) + adjustment
 
     # Fake an obstacle for cruise, this ensures smooth acceleration to set speed
     # when the leads are no factor.
