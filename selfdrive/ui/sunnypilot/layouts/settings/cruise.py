@@ -31,6 +31,12 @@ ACC_PCMCRUISE_DISABLED_DESCRIPTION = tr_noop("This feature is not supported on t
 ONROAD_ONLY_DESCRIPTION = tr_noop("Start the vehicle to check vehicle compatibility.")
 
 
+def _t_follow_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return f"+{v}%" if v > 0 else f"{v}%"
+
+
 class CruiseLayout(Widget):
   def __init__(self):
     super().__init__()
@@ -98,6 +104,18 @@ class CruiseLayout(Widget):
       description=tr('When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: "Set to speed limit on divided highways", which uses the same activation mechanism.'),
       param="RivianResumeEnabled")
 
+    self.following_time_offset = option_item_sp(
+      title=tr("Following Distance Offset"),
+      description=tr("Scales the time-gap to the lead car across all personality modes. "
+                     "Negative = follow closer; positive = follow further. "
+                     "Takes effect after the next drive."),
+      param="SPFollowingTimeOffset",
+      min_value=-20,
+      max_value=20,
+      value_change_step=5,
+      label_callback=_t_follow_offset_label,
+      inline=True)
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
@@ -108,6 +126,7 @@ class CruiseLayout(Widget):
       self.custom_acc_short_increment,
       self.custom_acc_long_increment,
       self.rivian_resume_toggle,
+      self.following_time_offset,
       self.sla_settings_button,
     ]
     return items
@@ -175,11 +194,17 @@ class CruiseLayout(Widget):
       if not is_rivian_long:
         ui_state.params.remove("RivianResumeEnabled")
 
+      self.following_time_offset.set_visible(has_long)
+      self.following_time_offset.action_item.set_enabled(has_long and ui_state.is_offroad())
+      if not has_long:
+        ui_state.params.remove("SPFollowingTimeOffset")
+
     else:
       has_icbm = has_long = False
       self.icbm_toggle.action_item.set_enabled(False)
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
       self.rivian_resume_toggle.action_item.set_enabled(False)
+      self.following_time_offset.set_visible(False)
 
     show_custom_acc_desc = False
 

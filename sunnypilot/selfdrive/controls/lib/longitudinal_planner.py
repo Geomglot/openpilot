@@ -8,6 +8,7 @@ See the LICENSE.md file in the root directory for more details.
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
+from openpilot.common.params import Params
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
 from openpilot.sunnypilot.selfdrive.controls.lib.e2e_alerts_helper import E2EAlertsHelper
@@ -35,6 +36,11 @@ class LongitudinalPlannerSP:
 
     self.output_v_target = 0.
     self.output_a_target = 0.
+
+    if CP.openpilotLongitudinalControl:
+      _params = Params()
+      raw_offset = int(_params.get("SPFollowingTimeOffset") or "0")
+      mpc.t_follow_offset_pct = max(-20, min(20, raw_offset))
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
