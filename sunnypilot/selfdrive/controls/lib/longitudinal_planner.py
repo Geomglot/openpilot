@@ -42,6 +42,8 @@ class LongitudinalPlannerSP:
       raw = int(_params.get("SPStopDistance") or "60")
       mpc.stop_distance = max(30, min(60, raw)) / 10.0
       mpc.personality_linked = _params.get_bool("SPStopDistancePersonality")
+      raw_offset = int(_params.get("SPFollowingTimeOffset") or "0")
+      mpc.t_follow_offset_pct = max(-20, min(20, raw_offset))
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode

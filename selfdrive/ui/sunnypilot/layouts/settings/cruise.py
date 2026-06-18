@@ -35,6 +35,12 @@ def _stop_distance_label(v: int) -> str:
   return f"{v / 10:.1f}m"
 
 
+def _t_follow_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return f"+{v}%" if v > 0 else f"{v}%"
+
+
 class CruiseLayout(Widget):
   def __init__(self):
     super().__init__()
@@ -121,6 +127,19 @@ class CruiseLayout(Widget):
                      "Standard uses the midpoint; Relaxed always uses 6.0 m."),
       param="SPStopDistancePersonality")
 
+    self.following_time_offset = option_item_sp(
+      title=tr("Following Distance Offset"),
+      description=tr("Scales the time-gap to the lead car across all personality modes. "
+                     "Negative = follow closer; positive = follow further. "
+                     "Takes effect after changing from OffRoad to OnRoad."),
+      param="SPFollowingTimeOffset",
+      min_value=-20,
+      max_value=20,
+      value_change_step=5,
+      label_callback=_t_follow_offset_label,
+      inline=True)
+
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
@@ -133,6 +152,7 @@ class CruiseLayout(Widget):
       self.rivian_resume_toggle,
       self.stop_distance_option,
       self.stop_distance_personality,
+      self.following_time_offset,
       self.sla_settings_button,
     ]
     return items
@@ -206,9 +226,12 @@ class CruiseLayout(Widget):
       below_max = stop_dist_val < 60
       self.stop_distance_personality.set_visible(has_long and below_max)
       self.stop_distance_personality.action_item.set_enabled(has_long and below_max and ui_state.is_offroad())
+      self.following_time_offset.set_visible(has_long)
+      self.following_time_offset.action_item.set_enabled(has_long and ui_state.is_offroad())
       if not has_long:
         ui_state.params.remove("SPStopDistance")
         ui_state.params.remove("SPStopDistancePersonality")
+        ui_state.params.remove("SPFollowingTimeOffset")
 
     else:
       has_icbm = has_long = False
@@ -217,6 +240,7 @@ class CruiseLayout(Widget):
       self.rivian_resume_toggle.action_item.set_enabled(False)
       self.stop_distance_option.set_visible(False)
       self.stop_distance_personality.set_visible(False)
+      self.following_time_offset.set_visible(False)
 
     show_custom_acc_desc = False
 

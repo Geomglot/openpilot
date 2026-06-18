@@ -270,6 +270,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SPStopDistance",            {PERSISTENT | BACKUP, INT, "60"}},
     {"SPStopDistancePersonality", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Following Distance
+    {"SPFollowingTimeOffset", {PERSISTENT | BACKUP, INT, "0"}},
+
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
     {"SmartCruiseControlMap", {PERSISTENT | BACKUP, BOOL, "0"}},
