@@ -31,6 +31,10 @@ ACC_PCMCRUISE_DISABLED_DESCRIPTION = tr_noop("This feature is not supported on t
 ONROAD_ONLY_DESCRIPTION = tr_noop("Start the vehicle to check vehicle compatibility.")
 
 
+def _stop_distance_label(v: int) -> str:
+  return f"{v / 10:.1f}m"
+
+
 class CruiseLayout(Widget):
   def __init__(self):
     super().__init__()
@@ -98,6 +102,25 @@ class CruiseLayout(Widget):
       description=tr('When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: "Set to speed limit on divided highways", which uses the same activation mechanism.'),
       param="RivianResumeEnabled")
 
+    self.stop_distance_option = option_item_sp(
+      title=tr("Minimum Stop Distance"),
+      description=tr("Gap behind a stopped lead car (4.5–6.0 m). Default 6.0 m. "
+                     "Only active when cruise set speed is ≤50 kph / 32 mph — reverts to 6.0 m above that speed. "
+                     "Takes effect after changing from OffRoad to OnRoad."),
+      param="SPStopDistance",
+      min_value=45,
+      max_value=60,
+      value_change_step=5,
+      label_callback=_stop_distance_label,
+      on_value_changed=self._on_stop_distance_changed,
+      inline=True)
+
+    self.stop_distance_personality = toggle_item_sp(
+      title=tr("Link Stop Distance to Personality"),
+      description=tr("When enabled and cruise speed is ≤50 kph / 32 mph: Aggressive uses the minimum distance; "
+                     "Standard uses the midpoint; Relaxed always uses 6.0 m."),
+      param="SPStopDistancePersonality")
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
@@ -108,6 +131,8 @@ class CruiseLayout(Widget):
       self.custom_acc_short_increment,
       self.custom_acc_long_increment,
       self.rivian_resume_toggle,
+      self.stop_distance_option,
+      self.stop_distance_personality,
       self.sla_settings_button,
     ]
     return items
@@ -175,11 +200,23 @@ class CruiseLayout(Widget):
       if not is_rivian_long:
         ui_state.params.remove("RivianResumeEnabled")
 
+      self.stop_distance_option.set_visible(has_long)
+      self.stop_distance_option.action_item.set_enabled(has_long and ui_state.is_offroad())
+      stop_dist_val = int(ui_state.params.get("SPStopDistance") or "60")
+      below_max = stop_dist_val < 60
+      self.stop_distance_personality.set_visible(has_long and below_max)
+      self.stop_distance_personality.action_item.set_enabled(has_long and below_max and ui_state.is_offroad())
+      if not has_long:
+        ui_state.params.remove("SPStopDistance")
+        ui_state.params.remove("SPStopDistancePersonality")
+
     else:
       has_icbm = has_long = False
       self.icbm_toggle.action_item.set_enabled(False)
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
       self.rivian_resume_toggle.action_item.set_enabled(False)
+      self.stop_distance_option.set_visible(False)
+      self.stop_distance_personality.set_visible(False)
 
     show_custom_acc_desc = False
 
@@ -210,3 +247,9 @@ class CruiseLayout(Widget):
     self.custom_acc_long_increment.set_visible(state)
     self.custom_acc_short_increment.action_item.set_enabled(self.custom_acc_toggle.action_item.enabled)
     self.custom_acc_long_increment.action_item.set_enabled(self.custom_acc_toggle.action_item.enabled)
+
+  def _on_stop_distance_changed(self, value: int) -> None:
+    below_max = value < 60
+    self.stop_distance_personality.set_visible(below_max)
+    if not below_max:
+      ui_state.params.remove("SPStopDistancePersonality")
