@@ -23,6 +23,20 @@ sections:
     enablement:
     - $ref: '#/macros/offroad'
     - $ref: '#/macros/longitudinal'
+  - key: RivianCruiseButtonOffset
+    widget: option
+    title: 'Rivian: Cruise Button Offset'
+    description: >-
+      Shift the long-press cruise snap grid.
+      Set speed will land on multiples of 5 mph / 10 kph plus this offset
+      (0 = standard; use 1–3 in mph mode, 1–6 in kph mode).
+      Takes effect after changing from OffRoad to OnRoad.
+    min: 0
+    max: 6
+    step: 1
+    enablement:
+    - $ref: '#/macros/offroad'
+    - $ref: '#/macros/longitudinal'
 - id: hyundai
   title: Hyundai / Kia / Genesis Settings
   description: ''

@@ -2249,6 +2249,25 @@
               "equals": true
             }
           ]
+        },
+        {
+          "key": "RivianCruiseButtonOffset",
+          "widget": "option",
+          "title": "Rivian: Cruise Button Offset",
+          "description": "Shift the long-press cruise snap grid. Set speed will land on multiples of 5 mph / 10 kph plus this offset (0 = standard; use 1\u20133 in mph mode, 1\u20136 in kph mode). Takes effect after changing from OffRoad to OnRoad.",
+          "min": 0,
+          "max": 6,
+          "step": 1,
+          "enablement": [
+            {
+              "type": "offroad_only"
+            },
+            {
+              "type": "capability",
+              "field": "has_longitudinal_control",
+              "equals": true
+            }
+          ]
         }
       ]
     },

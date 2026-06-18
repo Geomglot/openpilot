@@ -47,6 +47,12 @@ def _cruise_speed_offset_label(v: int) -> str:
   return f"+{v}" if v > 0 else str(v)
 
 
+def _rivian_button_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return str(v)
+
+
 class CruiseLayout(Widget):
   def __init__(self):
     super().__init__()
@@ -162,6 +168,16 @@ class CruiseLayout(Widget):
       label_callback=_cruise_speed_offset_label,
       inline=True)
 
+    self.rivian_button_offset = option_item_sp(
+      title=tr("Rivian: Cruise Button Offset"),
+      description="",
+      param="RivianCruiseButtonOffset",
+      min_value=0,
+      max_value=6,
+      value_change_step=1,
+      label_callback=_rivian_button_offset_label,
+      inline=True)
+
 
     items = [
       self.icbm_toggle,
@@ -178,6 +194,7 @@ class CruiseLayout(Widget):
       self.following_time_offset,
       self.live_speed_correction_toggle,
       self.cruise_speed_offset,
+      self.rivian_button_offset,
       self.sla_settings_button,
     ]
     return items
@@ -269,6 +286,20 @@ class CruiseLayout(Widget):
       if self.cruise_speed_offset.description != new_spd_desc:
         self.cruise_speed_offset.set_description(new_spd_desc)
 
+      self.rivian_button_offset.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
+      if not is_rivian_long:
+        ui_state.params.remove("RivianCruiseButtonOffset")
+
+      range_text = "1–6" if ui_state.is_metric else "1–3"
+      step_text = "10 kph" if ui_state.is_metric else "5 mph"
+      new_btn_desc = tr(f"Shift the long-press cruise snap grid. "
+                        f"Set speed will land on multiples of {step_text} plus this offset. "
+                        f"0 = standard (multiples of {step_text}). "
+                        f"Meaningful range: {range_text} {unit}. "
+                        f"Takes effect after changing from OffRoad to OnRoad.")
+      if self.rivian_button_offset.description != new_btn_desc:
+        self.rivian_button_offset.set_description(new_btn_desc)
+
       if not has_long:
         ui_state.params.remove("SPStopDistance")
         ui_state.params.remove("SPStopDistancePersonality")
@@ -286,6 +317,7 @@ class CruiseLayout(Widget):
       self.following_time_offset.set_visible(False)
       self.live_speed_correction_toggle.set_visible(False)
       self.cruise_speed_offset.set_visible(False)
+      self.rivian_button_offset.action_item.set_enabled(False)
 
     show_custom_acc_desc = False
 
