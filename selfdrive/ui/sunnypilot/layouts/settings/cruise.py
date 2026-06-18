@@ -209,8 +209,9 @@ class CruiseLayout(Widget):
 
       unit = "kph" if ui_state.is_metric else "mph"
       new_spd_desc = tr(f"Learned wheel-speed vs GPS offset. Positive = wheel reads high. "
-                        f"Typically 0 for standard tyres. "
+                        f"Typically 0 for standard tires. "
                         f"(e.g. +1 if wheel speed reads 1 {unit} high relative to GPS.) "
+                        f"You can also set it manually if you know your tire bias. "
                         f"Takes effect after changing from OffRoad to OnRoad.")
       if self.cruise_speed_offset.description != new_spd_desc:
         self.cruise_speed_offset.set_description(new_spd_desc)

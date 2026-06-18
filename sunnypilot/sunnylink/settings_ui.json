@@ -655,7 +655,7 @@
               "key": "SPCruiseSpeedOffset",
               "widget": "option",
               "title": "Speed Correction Offset",
-              "description": "Learned offset between wheel speed and GPS speed (kph/mph). Positive = wheel reads high. Typically 0 for standard tyres. Updated automatically during highway cruise when live learning is enabled. Takes effect after changing from OffRoad to OnRoad.",
+              "description": "Learned offset between wheel speed and GPS speed (kph/mph). Positive = wheel reads high. Typically 0 for standard tires. Updated automatically during highway cruise when live learning is enabled. You can also set it manually if you know your tire bias. Takes effect after changing from OffRoad to OnRoad.",
               "min": -5,
               "max": 5,
               "step": 1,
