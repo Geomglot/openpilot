@@ -188,12 +188,12 @@ class CruiseLayout(Widget):
       self.custom_acc_toggle,
       self.custom_acc_short_increment,
       self.custom_acc_long_increment,
-      self.rivian_resume_toggle,
       self.stop_distance_option,
       self.stop_distance_personality,
       self.following_time_offset,
       self.live_speed_correction_toggle,
       self.cruise_speed_offset,
+      self.rivian_resume_toggle,
       self.rivian_button_offset,
       self.sla_settings_button,
     ]
