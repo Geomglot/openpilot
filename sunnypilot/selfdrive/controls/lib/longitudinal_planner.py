@@ -46,13 +46,13 @@ class LongitudinalPlannerSP:
 
     if CP.openpilotLongitudinalControl:
       _params = Params()
-      raw = int(_params.get("SPStopDistance") or "60")
+      raw = _params.get("SPStopDistance", return_default=True)
       mpc.stop_distance = max(30, min(60, raw)) / 10.0
       mpc.personality_linked = _params.get_bool("SPStopDistancePersonality")
-      raw_offset = int(_params.get("SPFollowingTimeOffset") or "0")
+      raw_offset = _params.get("SPFollowingTimeOffset", return_default=True)
       mpc.t_follow_offset_pct = max(-20, min(20, raw_offset))
       self.live_speed_correction = _params.get_bool("SPLiveSpeedCorrectionEnabled")
-      raw_spd = int(_params.get("SPCruiseSpeedOffset") or "0")
+      raw_spd = _params.get("SPCruiseSpeedOffset", return_default=True)
       self.cruise_speed_offset_ms = max(-5, min(5, raw_spd)) * CV.KPH_TO_MS
       self._spd_ewa = float(raw_spd)
       self._gps_service = get_gps_location_service(_params)
@@ -141,7 +141,7 @@ class LongitudinalPlannerSP:
     if self._spd_samples % 50 == 0:
       learned_offset = int(round(self._spd_ewa))
       learned_offset = max(-5, min(5, learned_offset))
-      Params().put_int("SPCruiseSpeedOffset", learned_offset)
+      Params().put_nonblocking("SPCruiseSpeedOffset", learned_offset)
       self.cruise_speed_offset_ms = learned_offset * CV.KPH_TO_MS
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:

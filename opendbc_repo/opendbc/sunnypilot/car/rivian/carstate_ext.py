@@ -46,7 +46,7 @@ class CarStateExt:
     self._frames_since_acc_on: int = 0
     self._increase_long_pressed: bool = False
     self._decrease_long_pressed: bool = False
-    raw_offset = int(Params().get("RivianCruiseButtonOffset") or "0")
+    raw_offset = Params().get("RivianCruiseButtonOffset", return_default=True)
     self.cruise_button_offset = max(0, min(6, raw_offset))
 
   def update_stalk_controls(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> list:
