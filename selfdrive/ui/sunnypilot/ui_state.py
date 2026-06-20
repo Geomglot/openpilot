@@ -150,7 +150,7 @@ class UIStateSP:
     self.torque_override_friction = float(self.params.get("TorqueParamsOverrideFriction", return_default=True))
     self.true_v_ego_ui = self.params.get_bool("TrueVEgoUI")
     self.live_speed_correction = self.params.get_bool("SPLiveSpeedCorrectionEnabled")
-    self.cruise_speed_offset_kph = int(self.params.get("SPCruiseSpeedOffset") or "0")
+    self.cruise_speed_offset_kph = self.params.get("SPCruiseSpeedOffset", return_default=True)
     self.turn_signals = self.params.get_bool("ShowTurnSignals")
     self.boot_offroad_mode = self.params.get("DeviceBootMode", return_default=True)
     self.always_offroad = self.params.get_bool("OffroadMode")
