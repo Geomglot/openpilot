@@ -4,10 +4,13 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+from enum import IntEnum
+
 from openpilot.common.params import Params
+from openpilot.selfdrive.ui.sunnypilot.layouts.settings.visuals_sub_layouts.speed_badge_tuning import SpeedBadgeTuningLayout
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr, tr_noop
-from openpilot.system.ui.sunnypilot.widgets.list_view import toggle_item_sp, multiple_button_item_sp
+from openpilot.system.ui.sunnypilot.widgets.list_view import toggle_item_sp, multiple_button_item_sp, simple_button_item_sp
 from openpilot.system.ui.widgets.scroller_tici import Scroller
 from openpilot.system.ui.widgets import Widget
 
@@ -18,11 +21,18 @@ CHEVRON_INFO_DESCRIPTION = {
 }
 
 
+class PanelType(IntEnum):
+  VISUALS = 0
+  BADGE_TUNING = 1
+
+
 class VisualsLayout(Widget):
   def __init__(self):
     super().__init__()
 
     self._params = Params()
+    self._current_panel = PanelType.VISUALS
+    self._badge_tuning_layout = SpeedBadgeTuningLayout(lambda: self._set_current_panel(PanelType.VISUALS))
     items = self._initialize_items()
     self._scroller = Scroller(items, line_separator=True, spacing=0)
 
@@ -72,14 +82,20 @@ class VisualsLayout(Widget):
            "It is the driver's responsibility to observe their environment and make decisions accordingly."),
         None,
       ),
+      "HideVEgoUI": (
+        lambda: tr("Speedometer: Hide from Onroad Screen"),
+        tr("When enabled, the speedometer on the onroad screen is not displayed."),
+        None,
+      ),
       "TrueVEgoUI": (
         lambda: tr("Speedometer: Always Display True Speed"),
         tr("For applicable vehicles, always display the true vehicle current speed from wheel speed sensors."),
         None,
       ),
-      "HideVEgoUI": (
-        lambda: tr("Speedometer: Hide from Onroad Screen"),
-        tr("When enabled, the speedometer on the onroad screen is not displayed."),
+      "GpsBadgeEnabled": (
+        lambda: tr("Speedometer: Display Speed Badge"),
+        tr("Show the GPS/WHEEL speed-source badge beside the speedometer, indicating whether the "
+           "displayed true speed is currently confirmed by GPS. Requires True Speed to be on."),
         None,
       ),
       "ShowTurnSignals": (
@@ -105,6 +121,13 @@ class VisualsLayout(Widget):
       )
       self._toggles[param] = toggle
 
+    # Opens the Speed Badge Tuning submenu (the 4 tuning controls live there).
+    self._badge_tuning_button = simple_button_item_sp(
+      button_text=lambda: tr("Speed Badge Tuning"),
+      button_width=720,
+      callback=lambda: self._set_current_panel(PanelType.BADGE_TUNING),
+    )
+
     self._chevron_info = multiple_button_item_sp(
       title=lambda: tr("Display Metrics Below Chevron"),
       description="",
@@ -121,10 +144,10 @@ class VisualsLayout(Widget):
       inline=False
     )
 
-    items = list(self._toggles.values()) + [
-      self._chevron_info,
-      self._dev_ui_info,
-    ]
+    items = list(self._toggles.values())
+    # Place the Speed Badge Tuning button immediately below the Display Speed Badge toggle.
+    items.insert(list(self._toggle_defs).index("GpsBadgeEnabled") + 1, self._badge_tuning_button)
+    items += [self._chevron_info, self._dev_ui_info]
     return items
 
   def _update_state(self):
@@ -132,6 +155,15 @@ class VisualsLayout(Widget):
 
     for param in self._toggle_defs:
       self._toggles[param].action_item.set_state(self._params.get_bool(param))
+
+    # Speedometer gating cascade: Hide off -> True available; True on -> Badge available;
+    # Badge on -> tuning submenu available.
+    hide_on = self._params.get_bool("HideVEgoUI")
+    true_on = self._params.get_bool("TrueVEgoUI")
+    badge_on = self._params.get_bool("GpsBadgeEnabled")
+    self._toggles["TrueVEgoUI"].action_item.set_enabled(not hide_on)
+    self._toggles["GpsBadgeEnabled"].action_item.set_enabled(true_on and not hide_on)
+    self._badge_tuning_button.action_item.set_enabled(badge_on and true_on and not hide_on)
 
     self._dev_ui_info.action_item.set_selected_button(ui_state.params.get("DevUIInfo", return_default=True))
 
@@ -145,10 +177,19 @@ class VisualsLayout(Widget):
       ui_state.params.put("ChevronInfo", 0)
 
   def _render(self, rect):
+    if self._current_panel == PanelType.BADGE_TUNING:
+      self._badge_tuning_layout.render(rect)
+      return
     self._scroller.render(rect)
 
   def show_event(self):
+    self._set_current_panel(PanelType.VISUALS)
     self._scroller.show_event()
     if not ui_state.has_longitudinal_control:
       self._chevron_info.set_description(tr(CHEVRON_INFO_DESCRIPTION["disabled"]))
       self._chevron_info.show_description(True)
+
+  def _set_current_panel(self, panel: PanelType):
+    self._current_panel = panel
+    if panel == PanelType.BADGE_TUNING:
+      self._badge_tuning_layout.show_event()

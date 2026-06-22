@@ -4,6 +4,7 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import time
 from enum import IntEnum
 
 import pyray as rl
@@ -16,11 +17,11 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.onroad.hud_renderer import FONT_SIZES, COLORS
 
 # GPS/WHEEL trust badge tuning (compared in m/s)
-MATCH_TOL_MS = 1.0 * CV.KPH_TO_MS       # <=1 kph (~0.6 mph): displayed speed counts as matching GPS
-GPS_MIN_SPEED_MS = 10.0 * CV.KPH_TO_MS  # GPS speed unreliable below ~10 km/h. Deliberately far below the
-                                        # learner's 8.0 m/s sample floor: that floor keeps the slow EWA's
-                                        # samples pristine; the badge only needs GPS to be non-noisy.
-GPS_ACC_MAX_MS = 0.5                    # max speedAccuracy (m/s) to treat GPS as healthy (matches the learner)
+GPS_MIN_SPEED_MS = 10.0 * CV.KPH_TO_MS  # GPS speed is too noisy to trust below ~10 km/h
+MATCH_TOL_HYSTERESIS_MS = 1.0 * CV.KPH_TO_MS  # leave GPS_MATCH 1 kph beyond the (tunable) enter tolerance
+# The speedAccuracy health gate and the match-enter tolerance are tunable on-device via
+# ui_state.gps_badge_acc_max_ms / .gps_badge_match_tol_kph (Settings > Visuals; params
+# GpsBadgeSpeedAccMax / GpsBadgeMatchTol). Defaults: 1.5 m/s gate, 1.0 kph match tolerance.
 
 
 class SpeedSource(IntEnum):
@@ -41,6 +42,10 @@ class SpeedRenderer:
     self._source_candidate: SpeedSource = SpeedSource.NONE
     self._source_frames: int = 0
     self._debounce_frames: int = max(1, gui_app.target_fps // 2)
+    # GPS-health hold: keep the last good GPS speed for a short window so 1 Hz speedAccuracy
+    # spikes don't drop the badge to WHEEL_NOGPS (tunable: gps_badge_gps_hold_s).
+    self._gps_hold_speed: float | None = None
+    self._gps_hold_time: float = 0.0
 
     self._font_bold: rl.Font = gui_app.font(FontWeight.BOLD)
     self._font_medium: rl.Font = gui_app.font(FontWeight.MEDIUM)
@@ -51,8 +56,9 @@ class SpeedRenderer:
     self.v_ego_cluster_seen = self.v_ego_cluster_seen or v_ego_cluster != 0.0
     if self.v_ego_cluster_seen and not ui_state.true_v_ego_ui:
       v_ego = v_ego_cluster
-    elif ui_state.live_speed_correction:
-      offset_ms = ui_state.cruise_speed_offset_kph * CV.KPH_TO_MS
+    elif getattr(ui_state, 'live_speed_correction', False):
+      # Present only on branches that carry the live speed-correction learner; absent here -> raw vEgo.
+      offset_ms = getattr(ui_state, 'cruise_speed_offset_kph', 0) * CV.KPH_TO_MS
       v_ego = max(0.0, car_state.vEgo - offset_ms)
     else:
       v_ego = car_state.vEgo
@@ -60,31 +66,47 @@ class SpeedRenderer:
     speed_conversion = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
     self.speed = max(0.0, v_ego * speed_conversion)
 
+    # Debounce is tunable on-device (gps_badge_debounce_s); derive frames from the UI rate.
+    self._debounce_frames = max(1, round(ui_state.gps_badge_debounce_s * gui_app.target_fps))
     self._update_source(v_ego)
 
   def _gps_speed(self) -> float | None:
-    """Speed (m/s) from the first healthy GPS service, preferring external (ublox) like the learner."""
+    """Speed (m/s) from the first healthy GPS service, preferring external (ublox).
+
+    Holds the last healthy value for gps_badge_gps_hold_s after the last good fix, so the
+    1 Hz source's transient speedAccuracy spikes don't repeatedly drop the badge to
+    WHEEL_NOGPS on poor-GPS roads (hills/bends/canopy)."""
     sm = ui_state.sm
     for svc in ("gpsLocationExternal", "gpsLocation"):
       if not sm.valid[svc]:
         continue
       gps = sm[svc]
-      if gps.speed > 0 and gps.speedAccuracy <= GPS_ACC_MAX_MS:
+      if gps.speed > 0 and gps.speedAccuracy <= ui_state.gps_badge_acc_max_ms:
+        self._gps_hold_speed = gps.speed
+        self._gps_hold_time = time.monotonic()
         return gps.speed
+    # No currently-healthy fix: reuse the last good one briefly (hold window).
+    if self._gps_hold_speed is not None and (time.monotonic() - self._gps_hold_time) <= ui_state.gps_badge_gps_hold_s:
+      return self._gps_hold_speed
+    self._gps_hold_speed = None
     return None
 
   def _update_source(self, disp_ms: float) -> None:
-    # The badge only makes sense when the speedometer is showing wheel-derived ("true") speed.
-    if not ui_state.true_v_ego_ui or ui_state.hide_v_ego_ui:
+    # The badge only makes sense when the speedometer is showing wheel-derived ("true") speed,
+    # and only when the driver has opted in (GpsBadgeEnabled).
+    if not ui_state.true_v_ego_ui or ui_state.hide_v_ego_ui or not ui_state.gps_badge_enabled:
       raw = SpeedSource.NONE
     else:
       gps_speed = self._gps_speed()
       if gps_speed is None or disp_ms < GPS_MIN_SPEED_MS:
         raw = SpeedSource.WHEEL_NOGPS
-      elif abs(disp_ms - gps_speed) <= MATCH_TOL_MS:
-        raw = SpeedSource.GPS_MATCH
       else:
-        raw = SpeedSource.WHEEL_DIFF
+        # Hysteresis: enter GPS_MATCH within the (tunable) tolerance, leave it only once the
+        # displayed speed diverges a further 1 kph, so a diff hovering at the threshold (e.g.
+        # from a 1 Hz GPS) doesn't chatter green<->grey.
+        tol_enter = ui_state.gps_badge_match_tol_kph * CV.KPH_TO_MS
+        tol = (tol_enter + MATCH_TOL_HYSTERESIS_MS) if self.source == SpeedSource.GPS_MATCH else tol_enter
+        raw = SpeedSource.GPS_MATCH if abs(disp_ms - gps_speed) <= tol else SpeedSource.WHEEL_DIFF
 
     self._commit_source(raw)
 

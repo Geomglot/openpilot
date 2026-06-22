@@ -133,6 +133,11 @@ class UIStateSP:
     self.chevron_metrics = self.params.get("ChevronInfo")
     self.custom_interactive_timeout = self.params.get("InteractivityTimeout", return_default=True)
     self.developer_ui = self.params.get("DevUIInfo")
+    self.gps_badge_acc_max_ms = int(self.params.get("GpsBadgeSpeedAccMax", return_default=True)) / 10.0
+    self.gps_badge_match_tol_kph = int(self.params.get("GpsBadgeMatchTol", return_default=True)) / 10.0
+    self.gps_badge_debounce_s = int(self.params.get("GpsBadgeDebounce", return_default=True)) / 10.0
+    self.gps_badge_gps_hold_s = int(self.params.get("GpsBadgeGpsHold", return_default=True)) / 10.0
+    self.gps_badge_enabled = self.params.get_bool("GpsBadgeEnabled")
     self.hide_v_ego_ui = self.params.get_bool("HideVEgoUI")
     self.onroad_brightness = int(float(self.params.get("OnroadScreenOffBrightness", return_default=True)))
     self.onroad_brightness_timer_param = self.params.get("OnroadScreenOffTimer", return_default=True)

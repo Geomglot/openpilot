@@ -1564,16 +1564,119 @@
               ]
             },
             {
-              "key": "TrueVEgoUI",
-              "widget": "toggle",
-              "title": "Speedometer: Always Display True Speed",
-              "description": "For applicable vehicles, always display the true vehicle current speed from wheel speed sensors."
-            },
-            {
               "key": "HideVEgoUI",
               "widget": "toggle",
               "title": "Speedometer: Hide from Onroad Screen",
               "description": "When enabled, the speedometer on the onroad screen is not displayed."
+            },
+            {
+              "key": "TrueVEgoUI",
+              "widget": "toggle",
+              "title": "Speedometer: Always Display True Speed",
+              "description": "For applicable vehicles, always display the true vehicle current speed from wheel speed sensors.",
+              "enablement": [
+                {
+                  "type": "param",
+                  "key": "HideVEgoUI",
+                  "equals": false
+                }
+              ]
+            },
+            {
+              "key": "GpsBadgeEnabled",
+              "widget": "toggle",
+              "title": "Speedometer: Display Speed Badge",
+              "description": "Show the GPS/WHEEL speed-source badge beside the speedometer, indicating whether the displayed true speed is currently confirmed by GPS. Requires True Speed to be on.",
+              "enablement": [
+                {
+                  "type": "param",
+                  "key": "HideVEgoUI",
+                  "equals": false
+                },
+                {
+                  "type": "param",
+                  "key": "TrueVEgoUI",
+                  "equals": true
+                }
+              ]
+            }
+          ],
+          "sub_panels": [
+            {
+              "id": "speed_badge_tuning",
+              "label": "Speed Badge Tuning",
+              "trigger_key": "GpsBadgeEnabled",
+              "trigger_condition": {
+                "type": "param",
+                "key": "GpsBadgeEnabled",
+                "equals": true
+              },
+              "items": [
+                {
+                  "key": "GpsBadgeSpeedAccMax",
+                  "widget": "option",
+                  "title": "Speed Badge: GPS Accuracy Gate",
+                  "description": "Trust GPS for the speed-source badge only when its reported speed accuracy is within this value (tenths of m/s; 15 = 1.5 m/s, about 5.4 km/h / 3.4 mph). Raise it if the GPS badge rarely appears.",
+                  "min": 3,
+                  "max": 30,
+                  "step": 1,
+                  "enablement": [
+                    {
+                      "type": "param",
+                      "key": "GpsBadgeEnabled",
+                      "equals": true
+                    }
+                  ]
+                },
+                {
+                  "key": "GpsBadgeMatchTol",
+                  "widget": "option",
+                  "title": "Speed Badge: GPS Match Tolerance",
+                  "description": "Show the green GPS badge when the displayed speed is within this much of GPS (tenths of km/h; 10 = 1.0 km/h, about 0.6 mph). The badge releases a little beyond this (hysteresis) to avoid flicker.",
+                  "min": 0,
+                  "max": 50,
+                  "step": 1,
+                  "enablement": [
+                    {
+                      "type": "param",
+                      "key": "GpsBadgeEnabled",
+                      "equals": true
+                    }
+                  ]
+                },
+                {
+                  "key": "GpsBadgeDebounce",
+                  "widget": "option",
+                  "title": "Speed Badge: Stability (Debounce)",
+                  "description": "How long a change must persist before the badge switches (tenths of a second; 15 = 1.5 s). Higher = calmer badge (less flicker on hilly/bendy roads) but slower to react.",
+                  "min": 5,
+                  "max": 40,
+                  "step": 5,
+                  "enablement": [
+                    {
+                      "type": "param",
+                      "key": "GpsBadgeEnabled",
+                      "equals": true
+                    }
+                  ]
+                },
+                {
+                  "key": "GpsBadgeGpsHold",
+                  "widget": "option",
+                  "title": "Speed Badge: GPS Hold",
+                  "description": "Keep using the last good GPS fix for this long through brief accuracy dropouts (tenths of a second; 50 = 5.0 s), so the badge does not flicker to WHEEL where GPS is poor. 0 = off.",
+                  "min": 0,
+                  "max": 100,
+                  "step": 10,
+                  "enablement": [
+                    {
+                      "type": "param",
+                      "key": "GpsBadgeEnabled",
+                      "equals": true
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
