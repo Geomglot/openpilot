@@ -202,6 +202,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShowTurnSignals", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"StandstillTimer", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"TrueVEgoUI", {PERSISTENT | BACKUP, BOOL, "0"}},
+    // GPS/WHEEL speed-source badge. The four tuning values are stored in tenths so they can live in
+    // INT params: 15 = 1.5 m/s, 10 = 1.0 kph, 15 = 1.5 s, 50 = 5.0 s.
+    {"GpsBadgeEnabled", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"GpsBadgeSpeedAccMax", {PERSISTENT | BACKUP, INT, "15"}},
+    {"GpsBadgeMatchTol", {PERSISTENT | BACKUP, INT, "10"}},
+    {"GpsBadgeDebounce", {PERSISTENT | BACKUP, INT, "15"}},
+    {"GpsBadgeGpsHold", {PERSISTENT | BACKUP, INT, "50"}},
 
     // MADS params
     {"Mads", {PERSISTENT | BACKUP, BOOL, "1"}},

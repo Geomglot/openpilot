@@ -52,6 +52,11 @@ class UIStateSP:
     self.developer_ui = None
     self.hide_v_ego_ui: bool = False
     self.live_speed_correction: bool = False
+    self.gps_badge_enabled: bool = False
+    self.gps_badge_acc_max_ms: float = 1.5
+    self.gps_badge_match_tol_kph: float = 1.0
+    self.gps_badge_debounce_s: float = 1.5
+    self.gps_badge_gps_hold_s: float = 5.0
     self.cruise_speed_offset_kph: int = 0
     self.lane_centering_display: bool = False
     self.lane_centering_enabled: bool = False
@@ -186,6 +191,11 @@ class UIStateSP:
     self.torque_override_lat_accel_factor = float(self.params.get("TorqueParamsOverrideLatAccelFactor", return_default=True))
     self.torque_override_friction = float(self.params.get("TorqueParamsOverrideFriction", return_default=True))
     self.true_v_ego_ui = self.params.get_bool("TrueVEgoUI")
+    self.gps_badge_enabled = self.params.get_bool("GpsBadgeEnabled")
+    self.gps_badge_acc_max_ms = int(self.params.get("GpsBadgeSpeedAccMax", return_default=True)) / 10.0
+    self.gps_badge_match_tol_kph = int(self.params.get("GpsBadgeMatchTol", return_default=True)) / 10.0
+    self.gps_badge_debounce_s = int(self.params.get("GpsBadgeDebounce", return_default=True)) / 10.0
+    self.gps_badge_gps_hold_s = int(self.params.get("GpsBadgeGpsHold", return_default=True)) / 10.0
     self.live_speed_correction = self.params.get_bool("SPLiveSpeedCorrectionEnabled")
     self.cruise_speed_offset_kph = self.params.get("SPCruiseSpeedOffset", return_default=True)
     self.turn_signals = self.params.get_bool("ShowTurnSignals")
