@@ -37,6 +37,9 @@ class FakeParams:
     self._values = {
       "MadsSteeringMode": steering_mode,
       "RivianResumeEnabled": False,
+      # Unrelated INT params the constructor also reads. They are clamped with max()/min() straight
+      # off the read, so a None here raises TypeError long before any assertion is reached.
+      "RivianCruiseButtonOffset": 0,
     }
     if car_params_persistent is not None:
       self._values["CarParamsPersistent"] = car_params_persistent

@@ -35,6 +35,12 @@ def _stop_distance_label(v: int) -> str:
   return f"{v / 10:.1f}m"
 
 
+def _rivian_button_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return str(v)
+
+
 def _cruise_speed_offset_label(v: int) -> str:
   if v == 0:
     return tr("Default")
@@ -149,6 +155,16 @@ class CruiseLayout(Widget):
       label_callback=_cruise_speed_offset_label,
       inline=True)
 
+    self.rivian_button_offset = option_item_sp(
+      title=tr("Rivian: Cruise Button Offset"),
+      description="",
+      param="RivianCruiseButtonOffset",
+      min_value=0,
+      max_value=6,
+      value_change_step=1,
+      label_callback=_rivian_button_offset_label,
+      inline=True)
+
     self.sla_settings_button = simple_button_item_sp(
       button_text=lambda: tr("Speed Limit"),
       button_width=800,
@@ -180,6 +196,7 @@ class CruiseLayout(Widget):
       self.live_speed_correction_toggle,
       self.cruise_speed_offset,
       self.rivian_resume_toggle,
+      self.rivian_button_offset,
       self.sla_settings_button,
     ]
     return items
@@ -279,14 +296,29 @@ class CruiseLayout(Widget):
 
       is_rivian_long = ui_state.CP.brand == "rivian" and has_long
       self.rivian_resume_toggle.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
+      self.rivian_button_offset.set_visible(is_rivian_long)
+      self.rivian_button_offset.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
       if not is_rivian_long:
         ui_state.params.remove("RivianResumeEnabled")
+        ui_state.params.remove("RivianCruiseButtonOffset")
+
+      range_text = "1 to 6" if ui_state.is_metric else "1 to 3"
+      step_text = "10 kph" if ui_state.is_metric else "5 mph"
+      new_btn_desc = tr("Shifts the grid a long press snaps to. " +
+                        f"The set speed will land on multiples of {step_text} plus this offset. " +
+                        f"0 leaves it on plain multiples of {step_text}. " +
+                        f"Useful range: {range_text}. " +
+                        "Takes effect after changing from OffRoad to OnRoad.")
+      if self.rivian_button_offset.description != new_btn_desc:
+        self.rivian_button_offset.set_description(new_btn_desc)
 
     else:
       has_icbm = has_long = False
       self.icbm_toggle.action_item.set_enabled(False)
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
       self.rivian_resume_toggle.action_item.set_enabled(False)
+      self.rivian_button_offset.set_visible(False)
+      self.rivian_button_offset.action_item.set_enabled(False)
       self.following_time_offset.action_item.set_enabled(False)
       self.stop_distance_option.action_item.set_enabled(False)
       self.stop_distance_personality.action_item.set_enabled(False)

@@ -293,6 +293,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // Rivian
     {"RivianResumeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianCruiseButtonOffset", {PERSISTENT | BACKUP, INT, "0"}},
     {"RivianEnableAngleSteering",       {PERSISTENT | BACKUP, BOOL, "1"}},
     {"RivianAngleSteerMinSpeed",        {PERSISTENT | BACKUP, INT,  "0"}},
     {"RivianForceTorqueSteer",          {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL, "0"}},
