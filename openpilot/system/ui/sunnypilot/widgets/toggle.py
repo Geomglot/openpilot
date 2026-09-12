@@ -27,6 +27,15 @@ class ToggleSP(Toggle):
   def set_rect(self, rect: rl.Rectangle):
     self._rect = rl.Rectangle(rect.x, rect.y, style.TOGGLE_WIDTH, style.TOGGLE_HEIGHT)
 
+  def show_event(self):
+    # Re-read on reopen: the value may have moved since this widget was last drawn, e.g. a remote
+    # Sunnylink write, so showing the cached state would show a stale switch position.
+    if self.param_key:
+      self._state = self.params.get_bool(self.param_key)
+      self._progress = 1.0 if self._state else 0.0
+      self._target = self._progress
+    super().show_event()
+
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
     if self._enabled and self.param_key:
