@@ -111,7 +111,17 @@ class ExternalController:
     self.CP = CP
     self.steer_ratio = CP.steerRatio
     self.wheelbase = CP.wheelbase
-    self.VM = VehicleModel(get_safety_CP())
+    # Two vehicle models, deliberately.
+    # VM tracks the learned plant (steer ratio, tire stiffness) from the live parameters and is used
+    # ONLY to turn the model's desired curvature into a wheel angle - the same values, and the same
+    # clamp, controlsd feeds its own VehicleModel, so the angle we command agrees with the curvature
+    # the rest of the stack thinks it is asking for.
+    # VM_safety is pinned to the nominal specs the panda safety model is built from, and EVERY limiter
+    # below must stay on it. If our clamps drift off panda's fixed model, panda rejects the 0x110
+    # frame, the EPAS sees a counter gap and faults AngleControlCntr (route c17ea97dc5472650/00000006
+    # seg 3).
+    self.VM = VehicleModel(CP)
+    self.VM_safety = VehicleModel(get_safety_CP())
     # without angle hardware this collapses to a plain torque controller: torque_active
     # is pinned while lateral is active and the angle channel never engages
     self.angle_supported = bool(CP.flags & RivianFlags.ANGLE_HARNESS)
@@ -358,7 +368,7 @@ class ExternalController:
     # use future v_ego so the jerk limit ramps the angle down before the lat-accel envelope shrinks
     v_lookahead = max(CS.out.vEgoRaw + max(CS.out.aEgo, 0.0), 1.0)
     apply_angle = apply_steer_angle_limits_vm(apply_angle, self.apply_angle_last, v_lookahead,
-                                              CS.out.steeringAngleDeg, self.angle_active, CCP, self.VM)
+                                              CS.out.steeringAngleDeg, self.angle_active, CCP, self.VM_safety)
 
     if self.angle_active:
       # EPAS absolute envelope
@@ -366,7 +376,7 @@ class ExternalController:
       # deliverable steady-state angle is the tighter of the EPAS absolute limit and the VM lateral-
       # accel limit (the latter binds above ~8 m/s and is what the panda enforces). Commanding past it
       # while genuinely turning means the wheel can't reach the model's line -> saturation.
-      angle_max = min(fw_max, get_max_angle_vm(max(CS.out.vEgoRaw, 1.0), self.VM, CCP))
+      angle_max = min(fw_max, get_max_angle_vm(max(CS.out.vEgoRaw, 1.0), self.VM_safety, CCP))
       turning = abs(desired_lat_accel) > ANGLE_SAT_MIN_LAT_ACCEL
       saturated = turning and abs(desired_angle) > angle_max
       apply_angle = float(np.clip(apply_angle, -fw_max, fw_max))
@@ -377,7 +387,7 @@ class ExternalController:
       apply_angle = float(np.clip(apply_angle, lo, hi))
 
       # panda's per-frame jerk limit
-      step = get_max_angle_delta_vm(max(CS.out.vEgoRaw, 1.0), self.VM, CCP) * PANDA_STEP_MARGIN
+      step = get_max_angle_delta_vm(max(CS.out.vEgoRaw, 1.0), self.VM_safety, CCP) * PANDA_STEP_MARGIN
       apply_angle = float(np.clip(apply_angle, self.apply_angle_last - step, self.apply_angle_last + step))
 
     # debounce so a transient clamp/slew doesn't warn; counter resets whenever not saturated

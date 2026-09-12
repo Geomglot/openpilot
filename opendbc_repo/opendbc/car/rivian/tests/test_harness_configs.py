@@ -19,7 +19,8 @@ from opendbc.car.rivian.ext_controller import (ExternalController, EAC_RECOVER_F
                                                TOI_MAX_ANGLE_FRAMES, TOI_BLIP_FRAMES, ANGLE_SAT_FRAMES)
 from opendbc.car.rivian.ext_controller import (TORQUE_PREARM_ABORT_LOCKOUT, TORQUE_PREARM_EXIT_FRAC, TORQUE_PREARM_MAX_FRAMES,
                                                TORQUE_PREARM_MIN_HOLD)
-from opendbc.car.rivian.ext_controller import HANDS_OFF_EXIT_FRAMES, HANDOFF_MAX_ANGLE_DEG, PRESENCE_TORQUE_THRESHOLD
+from opendbc.car.rivian.ext_controller import HANDS_OFF_EXIT_FRAMES, HANDOFF_MAX_ANGLE_DEG, PRESENCE_TORQUE_THRESHOLD, PANDA_STEP_MARGIN
+from opendbc.car.lateral import get_max_angle_delta_vm
 from opendbc.car.rivian.interface import CarInterface
 from opendbc.car.rivian.values import CAR, CarControllerParams, RivianFlags, RivianSafetyFlags
 from opendbc.sunnypilot.car.rivian.mads import MadsCarController
@@ -632,6 +633,58 @@ def _enter_torque(erc, v_ego=2.0, angle=0.0, curvature=0.0):
   for _ in range(15):
     erc.update(_cs_frame(v_ego=v_ego, angle=angle, torque=6.0, pressed=True, eac_status=2), True, _actuators(curvature=curvature))
   assert erc.torque_active
+
+
+class TestLiveVehicleModel(unittest.TestCase):
+  def test_live_params_move_the_conversion_model_only(self):
+    # the learned plant must reach the curvature -> angle conversion, and must NOT reach the model the
+    # limiters use: those have to keep agreeing with panda's fixed safety model or a rejected 0x110
+    # leaves a counter gap and the EPAS faults AngleControlCntr
+    cp = _get_cp(xnor_box=True)
+    controller = CarController({Bus.pt: "rivian_primary_actuator"}, cp, structs.CarParamsSP())
+    erc = controller.erc
+    self.assertIsNot(erc.VM, erc.VM_safety)
+    safety_before = (erc.VM_safety.sR, erc.VM_safety.cF, erc.VM_safety.cR)
+
+    controller.update_live_params(0.0, 0.0, 1.4, 18.0)
+
+    self.assertAlmostEqual(erc.VM.sR, 18.0)
+    self.assertEqual((erc.VM_safety.sR, erc.VM_safety.cF, erc.VM_safety.cR), safety_before)
+    self.assertNotEqual((erc.VM.cF, erc.VM.cR), (erc.VM_safety.cF, erc.VM_safety.cR))
+
+  def test_live_params_are_clamped_like_controlsd(self):
+    # paramsd can publish zero/garbage before it converges; match the max(_, 0.1) controlsd applies
+    cp = _get_cp(xnor_box=True)
+    controller = CarController({Bus.pt: "rivian_primary_actuator"}, cp, structs.CarParamsSP())
+    controller.update_live_params(0.0, 0.0, 0.0, 0.0)
+    self.assertAlmostEqual(controller.erc.VM.sR, 0.1)
+
+  def test_the_emitted_angle_stays_inside_pandas_step_limit(self):
+    # This is the one that matters. Calling the limiter helpers with VM_safety by hand proves nothing,
+    # because it never touches the model the controller itself reaches for. Drive real frames with the
+    # learned plant pushed well away from the nominal spec, and check the angle actually emitted never
+    # steps further in one frame than panda's fixed model allows. A limiter left on the learned model
+    # gets a rejected 0x110, a counter gap, and an EPAS AngleControlCntr fault.
+    v_ego = 10.0
+    erc = ExternalController(_get_cp(xnor_box=True))
+    erc.VM.update_params(1.4, 30.0)
+    limit = get_max_angle_delta_vm(v_ego, erc.VM_safety, CarControllerParams) * PANDA_STEP_MARGIN
+
+    curv = _curv_for_angle(erc, 200.0, v_ego)  # hard demand, so the limiter is what binds
+    # engage the angle channel: EPAS ready on the first lat_active frame, then EAC goes active
+    erc.update(_cs_frame(v_ego=v_ego, eac_status=1), True, _actuators(curvature=curv))
+    prev = erc.apply_angle_last
+    worst = 0.0
+    angle_frames = 0
+    for _ in range(200):
+      erc.update(_cs_frame(v_ego=v_ego, eac_status=2), True, _actuators(curvature=curv))
+      angle_frames += erc.angle_active
+      worst = max(worst, abs(erc.apply_angle_last - prev))
+      prev = erc.apply_angle_last
+
+    self.assertEqual(angle_frames, 200, "never got into angle mode, so this proves nothing")
+    self.assertGreater(worst, 0.0, "the angle never moved, so this proves nothing")
+    self.assertLessEqual(worst, limit + 1e-6)
 
 
 class TestHandbackHysteresis(unittest.TestCase):
