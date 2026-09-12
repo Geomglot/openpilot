@@ -82,6 +82,8 @@ def _targets(v_ego, a_ego, v_cruise, vision=None, scc_map=None, curve=None, gove
   # update_targets() hands the winning cruise target to the MPC, which gates the reduced stop
   # distance on it. Nothing here reads it back; the stub just has to accept the write.
   planner.mpc = SimpleNamespace()
+  # no learned wheel-vs-GPS bias in these cases, so the set speed passes through untouched
+  planner.cruise_speed_offset_ms = 0.0
 
   sm = {
     'carState': SimpleNamespace(vCruiseCluster=v_cruise * 3.6),

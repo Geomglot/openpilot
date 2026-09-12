@@ -51,6 +51,8 @@ class UIStateSP:
     self.custom_interactive_timeout: int = 0
     self.developer_ui = None
     self.hide_v_ego_ui: bool = False
+    self.live_speed_correction: bool = False
+    self.cruise_speed_offset_kph: int = 0
     self.lane_centering_display: bool = False
     self.lane_centering_enabled: bool = False
     self.onroad_brightness: int = 0
@@ -184,6 +186,8 @@ class UIStateSP:
     self.torque_override_lat_accel_factor = float(self.params.get("TorqueParamsOverrideLatAccelFactor", return_default=True))
     self.torque_override_friction = float(self.params.get("TorqueParamsOverrideFriction", return_default=True))
     self.true_v_ego_ui = self.params.get_bool("TrueVEgoUI")
+    self.live_speed_correction = self.params.get_bool("SPLiveSpeedCorrectionEnabled")
+    self.cruise_speed_offset_kph = self.params.get("SPCruiseSpeedOffset", return_default=True)
     self.turn_signals = self.params.get_bool("ShowTurnSignals")
     self.boot_offroad_mode = self.params.get("DeviceBootMode", return_default=True)
     self.always_offroad = self.params.get_bool("OffroadMode")

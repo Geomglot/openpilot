@@ -872,6 +872,48 @@
               ]
             },
             {
+              "key": "SPLiveSpeedCorrectionEnabled",
+              "widget": "toggle",
+              "title": "Live Learning Speed Correction",
+              "description": "Let the car learn how far its wheel speed drifts from GPS, and aim the cruise set speed at the GPS figure. Also corrects the Always Display True Speed readout. Takes effect after changing from OffRoad to OnRoad.",
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                },
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "SPCruiseSpeedOffset",
+              "widget": "option",
+              "title": "Speed Correction Offset",
+              "description": "How far the wheel speed reads above GPS (kph/mph), learned while cruising. Positive means the wheels read high. Usually 0 on standard tyres. Set it by hand if you already know your tyre bias. Takes effect after changing from OffRoad to OnRoad.",
+              "min": -5,
+              "max": 5,
+              "step": 1,
+              "visibility": [
+                {
+                  "type": "param",
+                  "key": "SPLiveSpeedCorrectionEnabled",
+                  "equals": true
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "offroad_only"
+                },
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
               "key": "IntelligentCruiseButtonManagement",
               "widget": "toggle",
               "title": "Intelligent Cruise Button Management (ICBM) (Alpha)",

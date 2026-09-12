@@ -8,6 +8,7 @@ See the LICENSE.md file in the root directory for more details.
 from openpilot.cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
+from openpilot.common.gps import get_gps_location_service
 from openpilot.common.params import Params
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
@@ -37,6 +38,12 @@ class LongitudinalPlannerSP:
     self.output_v_target = 0.
     self.output_a_target = 0.
 
+    self.live_speed_correction = False
+    self.cruise_speed_offset_ms = 0.0
+    self._spd_ewa = 0.0
+    self._spd_samples = 0
+    self._gps_service = 'gpsLocation'
+
     if CP.openpilotLongitudinalControl:
       _params = Params()
       raw_stop = _params.get("SPStopDistance", return_default=True)
@@ -44,6 +51,11 @@ class LongitudinalPlannerSP:
       mpc.personality_linked = _params.get_bool("SPStopDistancePersonality")
       raw_offset = _params.get("SPFollowingTimeOffset", return_default=True)
       mpc.t_follow_offset_pct = max(-20, min(20, raw_offset))
+      self.live_speed_correction = _params.get_bool("SPLiveSpeedCorrectionEnabled")
+      raw_spd = _params.get("SPCruiseSpeedOffset", return_default=True)
+      self.cruise_speed_offset_ms = max(-5, min(5, raw_spd)) * CV.KPH_TO_MS
+      self._spd_ewa = float(raw_spd)
+      self._gps_service = get_gps_location_service(_params)
 
   def is_e2e(self, sm: messaging.SubMaster) -> bool:
     experimental_mode = sm['selfdriveState'].experimentalMode
@@ -53,6 +65,9 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def update_targets(self, sm: messaging.SubMaster, v_ego: float, a_ego: float, v_cruise: float) -> tuple[float, float]:
+    # Aim at the set speed as GPS measures it, not as the wheels report it.
+    v_cruise = max(0.0, v_cruise + self.cruise_speed_offset_ms)
+
     CS = sm['carState']
     v_cruise_cluster_kph = min(CS.vCruiseCluster, V_CRUISE_MAX)
     v_cruise_cluster = v_cruise_cluster_kph * CV.KPH_TO_MS
@@ -118,6 +133,45 @@ class LongitudinalPlannerSP:
     self.events_sp.clear()
     self.dec.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)
+    if self.live_speed_correction:
+      self._update_speed_learner(sm)
+
+  def _update_speed_learner(self, sm: messaging.SubMaster) -> None:
+    """Learn any steady bias between wheel speed and GPS speed.
+
+    Only samples during unremarkable cruising: healthy GPS fix, well above the speed where GPS
+    gets noisy, no meaningful acceleration, near enough straight, and openpilot doing the driving.
+    The average is deliberately slow (alpha 0.005, so roughly 200 qualifying samples to converge)
+    because this is a property of the tyres, not of the drive.
+    """
+    CS = sm['carState']
+    if not sm.valid[self._gps_service]:
+      return
+    gps = sm[self._gps_service]
+    if gps.speed <= 0:
+      return
+
+    gps_speed_ms = gps.speed
+    gps_accuracy_ms = gps.speedAccuracy
+
+    if (gps_accuracy_ms > 0.5 or
+        gps_speed_ms < 8.0 or
+        abs(CS.aEgo) > 0.3 or
+        abs(CS.steeringAngleDeg) > 5.0 or
+        not sm['carControl'].enabled):
+      return
+
+    wheel_offset_kph = (CS.vEgo - gps_speed_ms) * CV.MS_TO_KPH
+
+    alpha = 0.005
+    self._spd_ewa = (1 - alpha) * self._spd_ewa + alpha * wheel_offset_kph
+    self._spd_samples += 1
+
+    if self._spd_samples % 50 == 0:
+      learned_offset = int(round(self._spd_ewa))
+      learned_offset = max(-5, min(5, learned_offset))
+      Params().put("SPCruiseSpeedOffset", learned_offset)
+      self.cruise_speed_offset_ms = learned_offset * CV.KPH_TO_MS
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')

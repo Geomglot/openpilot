@@ -35,6 +35,12 @@ def _stop_distance_label(v: int) -> str:
   return f"{v / 10:.1f}m"
 
 
+def _cruise_speed_offset_label(v: int) -> str:
+  if v == 0:
+    return tr("Default")
+  return f"+{v}" if v > 0 else str(v)
+
+
 def _t_follow_offset_label(v: int) -> str:
   if v == 0:
     return tr("Default")
@@ -125,6 +131,24 @@ class CruiseLayout(Widget):
       label_callback=_t_follow_offset_label,
       inline=True)
 
+    self.live_speed_correction_toggle = toggle_item_sp(
+      title=tr("Live Learning Speed Correction"),
+      description=tr("Let the car learn how far its wheel speed drifts from GPS, and aim the cruise " +
+                     "set speed at the GPS figure. Also corrects the Always Display True Speed readout. " +
+                     "Takes effect after changing from OffRoad to OnRoad."),
+      param="SPLiveSpeedCorrectionEnabled",
+      callback=self._on_live_speed_correction_toggle)
+
+    self.cruise_speed_offset = option_item_sp(
+      title=tr("Speed Correction Offset"),
+      description="",
+      param="SPCruiseSpeedOffset",
+      min_value=-5,
+      max_value=5,
+      value_change_step=1,
+      label_callback=_cruise_speed_offset_label,
+      inline=True)
+
     self.sla_settings_button = simple_button_item_sp(
       button_text=lambda: tr("Speed Limit"),
       button_width=800,
@@ -153,6 +177,8 @@ class CruiseLayout(Widget):
       self.stop_distance_option,
       self.stop_distance_personality,
       self.following_time_offset,
+      self.live_speed_correction_toggle,
+      self.cruise_speed_offset,
       self.rivian_resume_toggle,
       self.sla_settings_button,
     ]
@@ -213,6 +239,19 @@ class CruiseLayout(Widget):
         self.following_time_offset.action_item.set_enabled(has_long and ui_state.is_offroad())
         self.stop_distance_option.action_item.set_enabled(has_long and ui_state.is_offroad())
         self.stop_distance_personality.action_item.set_enabled(has_long and ui_state.is_offroad())
+        self.live_speed_correction_toggle.action_item.set_enabled(has_long and ui_state.is_offroad())
+        live_spd = has_long and ui_state.params.get_bool("SPLiveSpeedCorrectionEnabled")
+        self.cruise_speed_offset.set_visible(live_spd)
+        self.cruise_speed_offset.action_item.set_enabled(live_spd and ui_state.is_offroad())
+
+        unit = "kph" if ui_state.is_metric else "mph"
+        new_spd_desc = tr("How far the wheel speed reads above GPS, learned while cruising. " +
+                          "Positive means the wheels read high, for example +1 if they read " +
+                          f"1 {unit} above GPS. Usually 0 on standard tyres. Set it by hand if you " +
+                          "already know your tyre bias. " +
+                          "Takes effect after changing from OffRoad to OnRoad.")
+        if self.cruise_speed_offset.description != new_spd_desc:
+          self.cruise_speed_offset.set_description(new_spd_desc)
       else:
         ui_state.params.remove("CustomAccIncrementsEnabled")
         ui_state.params.remove("DynamicExperimentalControl")
@@ -227,11 +266,16 @@ class CruiseLayout(Widget):
         self.following_time_offset.action_item.set_enabled(False)
         self.stop_distance_option.action_item.set_enabled(False)
         self.stop_distance_personality.action_item.set_enabled(False)
+        self.live_speed_correction_toggle.action_item.set_enabled(False)
+        self.cruise_speed_offset.set_visible(False)
+        self.cruise_speed_offset.action_item.set_enabled(False)
 
       if not has_long:
         ui_state.params.remove("SPFollowingTimeOffset")
         ui_state.params.remove("SPStopDistance")
         ui_state.params.remove("SPStopDistancePersonality")
+        ui_state.params.remove("SPLiveSpeedCorrectionEnabled")
+        ui_state.params.remove("SPCruiseSpeedOffset")
 
       is_rivian_long = ui_state.CP.brand == "rivian" and has_long
       self.rivian_resume_toggle.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
@@ -246,6 +290,9 @@ class CruiseLayout(Widget):
       self.following_time_offset.action_item.set_enabled(False)
       self.stop_distance_option.action_item.set_enabled(False)
       self.stop_distance_personality.action_item.set_enabled(False)
+      self.live_speed_correction_toggle.action_item.set_enabled(False)
+      self.cruise_speed_offset.set_visible(False)
+      self.cruise_speed_offset.action_item.set_enabled(False)
 
     show_custom_acc_desc = False
 
@@ -270,6 +317,9 @@ class CruiseLayout(Widget):
         self.custom_acc_toggle.show_description(True)
 
     self._on_custom_acc_toggle(self.custom_acc_toggle.action_item.get_state())
+
+  def _on_live_speed_correction_toggle(self, state):
+    self.cruise_speed_offset.set_visible(state)
 
   def _on_stop_distance_changed(self, value: int) -> None:
     below_max = value < 60

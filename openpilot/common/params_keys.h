@@ -307,6 +307,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // Following Distance
     {"SPFollowingTimeOffset", {PERSISTENT | BACKUP, INT, "0"}},
 
+    // Live-learning cruise speed correction
+    {"SPLiveSpeedCorrectionEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"SPCruiseSpeedOffset",          {PERSISTENT | BACKUP, INT,  "0"}},
+
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
     {"SmartCruiseControlMap", {PERSISTENT | BACKUP, BOOL, "0"}},
