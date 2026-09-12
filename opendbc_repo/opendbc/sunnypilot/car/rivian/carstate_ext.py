@@ -33,7 +33,7 @@ class CarStateExt:
     self.vdm_user_adas_request = 0
     self._lkas_pending = False
     # lazy openpilot imports: opendbc must stay importable standalone (safety test suite)
-    from openpilot.common.params import Params
+    from openpilot.common.params import Params, UnknownKeyName
     from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param
     # First-ever drive on this device: seed the Rivian default of DISENGAGE.
     # CarParamsPersistent is written by card.py AFTER the CarInterface (and so this constructor) is built, and it has
@@ -61,6 +61,37 @@ class CarStateExt:
     # Shifts the grid a long press snaps to, so it can land on the numbers the driver actually wants.
     raw_button_offset = params.get("RivianCruiseButtonOffset", return_default=True)
     self.cruise_button_offset = max(0, min(6, raw_button_offset))
+
+    # What the driver actually sees on the speedometer, mirrored from speed_renderer.py, so the set
+    # speed can be snapped to that number rather than to the dash cluster's own.
+    self._params = params
+    self._true_v_ego_ui = params.get_bool("TrueVEgoUI")
+    self._live_speed_correction = False
+    self.cruise_speed_offset_ms = 0.0
+    self._speed_pref_counter = 0
+    try:
+      self._live_speed_correction = params.get_bool("SPLiveSpeedCorrectionEnabled")
+      raw_spd = params.get("SPCruiseSpeedOffset", return_default=True)
+      self.cruise_speed_offset_ms = max(-5, min(5, raw_spd)) * CV.KPH_TO_MS
+      self._has_speed_learner = True
+    except UnknownKeyName:
+      # the live-learning speed correction has not been rolled out onto this branch
+      self._has_speed_learner = False
+
+  def _refresh_speed_prefs(self) -> None:
+    self._true_v_ego_ui = self._params.get_bool("TrueVEgoUI")
+    if self._has_speed_learner:
+      self._live_speed_correction = self._params.get_bool("SPLiveSpeedCorrectionEnabled")
+      raw_spd = self._params.get("SPCruiseSpeedOffset", return_default=True)
+      self.cruise_speed_offset_ms = max(-5, min(5, raw_spd)) * CV.KPH_TO_MS
+
+  def _display_reference_speed(self, ret: structs.CarState) -> float:
+    # The number on the speedometer (see speed_renderer.py), which is what the driver is aiming at.
+    if not self._true_v_ego_ui:
+      return ret.vEgoCluster
+    if self._live_speed_correction:
+      return max(0.0, ret.vEgo - self.cruise_speed_offset_ms)
+    return ret.vEgo
 
   def update_stalk_controls(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> list:
     cp = can_parsers[Bus.pt]
@@ -116,6 +147,11 @@ class CarStateExt:
       # button logic for set-speed
       self.increase_button = cp_park.vl["WheelButtons_Fwd"]["RightButton_RightClick"] == 2
       self.decrease_button = cp_park.vl["WheelButtons_Fwd"]["RightButton_LeftClick"] == 2
+
+      self._speed_pref_counter += 1
+      if self._speed_pref_counter >= 100:  # ~1 s at the 100 Hz car loop
+        self._speed_pref_counter = 0
+        self._refresh_speed_prefs()
 
       self.increase_counter = self.increase_counter + 1 if self.increase_button else 0
       self.decrease_counter = self.decrease_counter + 1 if self.decrease_button else 0
@@ -175,11 +211,11 @@ class CarStateExt:
           self._resume_eligible = True
 
       if not ret.cruiseState.enabled:
-        self.set_speed = ret.vEgoCluster
+        self.set_speed = self._display_reference_speed(ret)
 
       if stalk_down and not self._prev_stalk_down and not self._resume_eligible:
         # Mimic Rivian ACC: tapping stalk down snaps set speed to current speed (never decreases)
-        self.set_speed = max(self.set_speed, ret.vEgoCluster)
+        self.set_speed = max(self.set_speed, self._display_reference_speed(ret))
 
       self._prev_cruise_enabled = ret.cruiseState.enabled
       self._prev_stalk_down2 = stalk_down2
