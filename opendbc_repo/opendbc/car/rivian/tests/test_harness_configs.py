@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from opendbc.can import CANPacker
+from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.rivian.carcontroller import CarController, LOW_SPEED_TORQUE_HYST_MS
@@ -685,6 +685,46 @@ class TestLiveVehicleModel(unittest.TestCase):
     self.assertEqual(angle_frames, 200, "never got into angle mode, so this proves nothing")
     self.assertGreater(worst, 0.0, "the angle never moved, so this proves nothing")
     self.assertLessEqual(worst, limit + 1e-6)
+
+
+class TestStockAccCancelUnderOpenpilotLong(unittest.TestCase):
+  """If openpilot drops out while the ACM is in ACC under openpilot long, the forwarded VDM_AdasSts must carry the
+  driver cancel (UP_1) with 'available' for 5 frames, then 'unavailable'. Without it the ACM latches an ACC fault."""
+
+  def _run(self, cancel_frames, extra_frames=0, stock_request=0):
+    cp = _get_cp(xnor_box=True)
+    cp.openpilotLongitudinalControl = True
+    controller = CarController({Bus.pt: "rivian_primary_actuator"}, cp, structs.CarParamsSP())
+    cs = _mock_cs(cp)
+    cs.vdm_adas_status = [dict(VDM_AdasStatus_Checksum=0, VDM_AdasStatus_Counter=0, VDM_AdasDecelLimit=0,
+                               VDM_AdasDriverAccelPriorityStatus=0, VDM_AdasFaultStatus=0, VDM_AdasAccelLimit=0,
+                               VDM_AdasDriverModeStatus=0, VDM_AdasUnkown1=0, VDM_AdasInterfaceStatus=0,
+                               VDM_AdasVehicleHoldStatus=0, VDM_UserAdasRequest=stock_request)]
+    parser = CANParser("rivian_primary_actuator", [("VDM_AdasSts", math.nan)], 2)
+    seen = []
+    for i in range(cancel_frames + extra_frames):
+      cc = structs.CarControl()
+      cc.cruiseControl.cancel = i < cancel_frames
+      _, can_sends = controller.update(cc.as_reader(), structs.CarControlSP(), cs, i * 10_000_000)
+      for addr, dat, bus in [(m[0], m[1], m[2]) for m in can_sends]:
+        if addr == 0x162 and bus == 2:
+          parser.update([(0, [(addr, dat, bus)])])
+          seen.append((int(parser.vl["VDM_AdasSts"]["VDM_UserAdasRequest"]), int(parser.vl["VDM_AdasSts"]["VDM_AdasInterfaceStatus"])))
+    return seen
+
+  def test_cancel_sequence(self):
+    seen = self._run(8)
+    self.assertEqual(seen[:5], [(1, 1)] * 5)
+    self.assertTrue(all(s[1] == 0 for s in seen[5:]), seen)
+    self.assertEqual(len(seen), 8)
+
+  def test_no_cancel_passes_stock_stream_unchanged(self):
+    self.assertEqual(self._run(0, 6, stock_request=0), [(0, 0)] * 6)
+
+  def test_sequence_restarts_after_cancel_clears(self):
+    a = self._run(3, 3)
+    self.assertEqual(a[:3], [(1, 1)] * 3)
+    self.assertEqual(a[3:], [(0, 0)] * 3)
 
 
 class TestHandbackHysteresis(unittest.TestCase):
