@@ -47,6 +47,24 @@ macros:
               - type: not
                 condition: {type: capability, field: tesla_has_vehicle_bus, equals: true}
 
+  # Brake modes other than Disengage: Tesla-without-vehicle-bus never, Rivian only while
+  # "Use enhanced Rivian MADS" is on.
+  mads_steering_full_platforms:
+    - type: not
+      condition:
+        type: any
+        conditions:
+          - type: all
+            conditions:
+              - {type: capability, field: brand, equals: tesla}
+              - type: not
+                condition: {type: capability, field: tesla_has_vehicle_bus, equals: true}
+          - type: all
+            conditions:
+              - {type: capability, field: brand, equals: rivian}
+              - type: not
+                condition: {type: param, key: RivianEnhancedMads, equals: true}
+
   # Inverse of mads_full_platforms: present only on the limited platforms.
   # Useful for "show this only on rivian/tesla-no-bus" toggles.
   mads_limited_platforms:

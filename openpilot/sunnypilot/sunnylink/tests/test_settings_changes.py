@@ -125,6 +125,15 @@ class TestMadsBrandGates(OpenpilotTestCase):
     assert _references_capability_field(item.get("enablement"), "brand")
     assert _references_capability_field(item.get("enablement"), "tesla_has_vehicle_bus")
 
+  def test_rivian_enhanced_mads_toggle_has_rivian_gate(self, schema):
+    """RivianEnhancedMads sets the panda safety param, so it is Rivian-only, offroad-only and needs an onroad cycle."""
+    item = _find_item(schema, "RivianEnhancedMads")
+    assert item is not None
+    assert item.get("widget") == "toggle"
+    assert item.get("needs_onroad_cycle") is True
+    assert _references_capability_field(item.get("enablement"), "brand")
+    assert any(r.get("type") == "offroad_only" for r in item.get("enablement", []))
+
 
 class TestTestManeuversSection(OpenpilotTestCase):
   def test_lateral_maneuver_mode_in_test_maneuvers(self, schema):

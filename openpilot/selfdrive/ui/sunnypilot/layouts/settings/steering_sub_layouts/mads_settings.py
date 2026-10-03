@@ -32,6 +32,10 @@ STATUS_CHECK_COMPATIBILITY = tr("Start the vehicle to check vehicle compatibilit
 DEFAULT_TO_OFF = tr("This feature defaults to OFF, and does not allow selection due to vehicle limitations.")
 DEFAULT_TO_ON = tr("This feature defaults to ON, and does not allow selection due to vehicle limitations.")
 STATUS_DISENGAGE_ONLY = tr("This platform only supports Disengage mode due to vehicle limitations.")
+RIVIAN_ENHANCED_MADS_DESC = tr("Adds to MADS on Rivian: one click up on the stalk turns steering assist on or off, every brake mode can be " +
+                               "chosen, shifting into Park or Reverse or a full stalk pull switches MADS off, and a minimum speed to " +
+                               "engage can be set. When off, MADS works as in stock sunnypilot: the brake turns steering assist off " +
+                               "and it comes back with cruise. Takes effect after changing from OffRoad to OnRoad.")
 
 
 class MadsSettingsLayout(Widget):
@@ -43,6 +47,12 @@ class MadsSettingsLayout(Widget):
     self._scroller = Scroller(self.items, line_separator=True, spacing=0)
 
   def _initialize_items(self):
+    self._rivian_enhanced_mads_toggle = toggle_item_sp(
+      title=lambda: tr("Use enhanced Rivian MADS"),
+      description=RIVIAN_ENHANCED_MADS_DESC,
+      param="RivianEnhancedMads",
+      enabled=lambda: ui_state.is_offroad(),
+    )
     self._main_cruise_toggle = toggle_item_sp(
       title=lambda: tr("Toggle with Main Cruise"),
       description=MADS_MAIN_CRUISE_BASE_DESC,
@@ -64,6 +74,7 @@ class MadsSettingsLayout(Widget):
     )
 
     self.items = [
+      self._rivian_enhanced_mads_toggle,
       self._main_cruise_toggle,
       self._unified_engagement_toggle,
       self._steering_mode,
@@ -84,7 +95,7 @@ class MadsSettingsLayout(Widget):
     self._scroller.show_event()
 
   @staticmethod
-  def _mads_limited_settings() -> bool:
+  def _get_brand() -> str:
     brand = ""
     if ui_state.is_offroad():
       bundle = ui_state.params.get("CarPlatformBundle")
@@ -92,9 +103,14 @@ class MadsSettingsLayout(Widget):
         brand = bundle.get("brand", "")
     if not brand:
       brand = ui_state.CP.brand if ui_state.CP is not None else ""
+    return brand
+
+  @staticmethod
+  def _mads_limited_settings() -> bool:
+    brand = MadsSettingsLayout._get_brand()
 
     if brand == "rivian":
-      return True
+      return not ui_state.params.get_bool("RivianEnhancedMads")
     elif brand == "tesla":
       if ui_state.CP_SP is None or not ui_state.CP_SP.flags & TeslaFlagsSP.HAS_VEHICLE_BUS:
         return True
@@ -112,6 +128,8 @@ class MadsSettingsLayout(Widget):
     self._steering_mode.show_description(True)
 
   def _update_toggles(self):
+    rivian = self._get_brand() == "rivian"
+    self._rivian_enhanced_mads_toggle.set_visible(rivian)
     self._update_steering_mode_description(self._steering_mode.action_item.get_selected_button())
     if self._mads_limited_settings():
       ui_state.params.remove("MadsMainCruiseAllowed")
@@ -129,6 +147,19 @@ class MadsSettingsLayout(Widget):
       self._steering_mode.set_description(STATUS_DISENGAGE_ONLY)
       self._steering_mode.action_item.set_selected_button(MadsSteeringModeOnBrake.DISENGAGE)
       self._steering_mode.action_item.set_enabled_buttons({MadsSteeringModeOnBrake.DISENGAGE})
+    elif rivian:
+      # Enhanced Rivian MADS: every brake mode, but Rivian has no ACC main button and engages
+      # lateral with cruise, so these two stay locked. The car start enforces them.
+      self._main_cruise_toggle.action_item.set_enabled(False)
+      self._main_cruise_toggle.action_item.set_state(False)
+      self._main_cruise_toggle.set_description("<b>" + DEFAULT_TO_OFF + "</b><br>" + MADS_MAIN_CRUISE_BASE_DESC)
+
+      self._unified_engagement_toggle.action_item.set_enabled(False)
+      self._unified_engagement_toggle.action_item.set_state(True)
+      self._unified_engagement_toggle.set_description("<b>" + DEFAULT_TO_ON + "</b><br>" + MADS_UNIFIED_ENGAGEMENT_MODE_BASE_DESC)
+
+      self._steering_mode.action_item.set_enabled(True)
+      self._steering_mode.action_item.set_enabled_buttons(None)
     else:
       self._main_cruise_toggle.action_item.set_enabled(True)
       self._main_cruise_toggle.set_description(MADS_MAIN_CRUISE_BASE_DESC)
