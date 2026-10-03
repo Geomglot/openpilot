@@ -255,6 +255,35 @@
                       "type": "offroad_only"
                     }
                   ]
+                },
+                {
+                  "key": "MadsMinEngageSpeed",
+                  "widget": "option",
+                  "needs_onroad_cycle": true,
+                  "title": "Minimum Speed to Engage MADS",
+                  "description": "Rivian with enhanced MADS. Minimum vehicle speed for the stalk to (re-)engage steering assist. Engaging cruise is not limited. 0 = no minimum.",
+                  "min": 0,
+                  "max": 20,
+                  "step": 1,
+                  "unit": {
+                    "metric": "km/h",
+                    "imperial": "mph"
+                  },
+                  "enablement": [
+                    {
+                      "type": "offroad_only"
+                    },
+                    {
+                      "type": "capability",
+                      "field": "brand",
+                      "equals": "rivian"
+                    },
+                    {
+                      "type": "param",
+                      "key": "RivianEnhancedMads",
+                      "equals": true
+                    }
+                  ]
                 }
               ]
             }

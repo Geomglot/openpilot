@@ -134,6 +134,13 @@ class TestMadsBrandGates(OpenpilotTestCase):
     assert _references_capability_field(item.get("enablement"), "brand")
     assert any(r.get("type") == "offroad_only" for r in item.get("enablement", []))
 
+  def test_mads_min_engage_speed_needs_rivian_enhanced_mads(self, schema):
+    """The minimum engage speed is part of "Use enhanced Rivian MADS"."""
+    item = _find_item(schema, "MadsMinEngageSpeed")
+    assert item is not None
+    assert _references_capability_field(item.get("enablement"), "brand")
+    assert {"type": "param", "key": "RivianEnhancedMads", "equals": True} in item.get("enablement", [])
+
 
 class TestTestManeuversSection(OpenpilotTestCase):
   def test_lateral_maneuver_mode_in_test_maneuvers(self, schema):

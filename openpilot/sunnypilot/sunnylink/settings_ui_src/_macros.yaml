@@ -65,6 +65,11 @@ macros:
               - type: not
                 condition: {type: param, key: RivianEnhancedMads, equals: true}
 
+  # Rivian with "Use enhanced Rivian MADS" on.
+  rivian_enhanced_mads:
+    - {type: capability, field: brand, equals: rivian}
+    - {type: param, key: RivianEnhancedMads, equals: true}
+
   # Inverse of mads_full_platforms: present only on the limited platforms.
   # Useful for "show this only on rivian/tesla-no-bus" toggles.
   mads_limited_platforms:

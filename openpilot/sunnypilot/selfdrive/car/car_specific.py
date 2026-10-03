@@ -10,6 +10,7 @@ from opendbc.car import structs
 
 from opendbc.car.chrysler.values import RAM_DT
 from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
+from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.selfdrive.selfdrived.events import Events
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param
@@ -35,7 +36,11 @@ class CarSpecificEventsSP:
     if self.CP.brand == 'rivian':
       # "Use enhanced Rivian MADS". Off, none of the Rivian MADS handling below runs and MADS is stock.
       self._rivian_enhanced_mads = bool(CP_SP.flags & RivianFlagsSP.ENHANCED_MADS)
-      self._rivian_steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, Params())
+      params = Params()
+      self._rivian_steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, params)
+      self._rivian_min_engage_speed_ms = 0.0
+      if self._rivian_enhanced_mads:
+        self._rivian_min_engage_speed_ms = int(params.get("MadsMinEngageSpeed", return_default=True)) * CV.MPH_TO_MS  # stored in mph
 
   def update(self, CS: structs.CarState, events: Events):
     events_sp = EventsSP()
@@ -116,3 +121,10 @@ class CarSpecificEventsSP:
     # USER_DISABLE is checked first. Covers standstill, where pedalPressed stops firing.
     if CS.brakePressed and self._rivian_steering_mode_on_brake == MadsSteeringModeOnBrake.PAUSE:
       events_sp.add(EventNameSP.silentLkasDisable)
+
+    # Minimum speed to (re-)engage MADS lateral with the stalk. Cruise/UEM engagement (pcmEnable or
+    # buttonEnable this frame) is exempt, so engaging cruise always brings lateral at any speed.
+    # belowMadsMinEngageSpeed is ET.NO_ENTRY, which only blocks engaging, never an active MADS.
+    selfdrive_enable_events = events.has(EventName.pcmEnable) or events.has(EventName.buttonEnable)
+    if self._rivian_min_engage_speed_ms > 0 and not selfdrive_enable_events and CS.vEgo < self._rivian_min_engage_speed_ms:
+      events_sp.add(EventNameSP.belowMadsMinEngageSpeed)

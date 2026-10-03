@@ -9,6 +9,7 @@ setting on. With it off, MADS is stock and this code emits nothing.
 """
 from openpilot.cereal import custom, log
 from opendbc.car import structs
+from openpilot.common.constants import CV
 from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
 from openpilot.selfdrive.selfdrived.events import Events
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake
@@ -22,17 +23,16 @@ GearShifter = structs.CarState.GearShifter
 
 
 class FakeParams:
-  # read_steering_mode_param() reads MadsSteeringMode once, in the constructor.
-  def __init__(self, steering_mode):
-    self.steering_mode = steering_mode
+  # The constructor reads the brake mode and the minimum engage speed once.
+  def __init__(self, steering_mode, min_engage_mph):
+    self.values = {"MadsSteeringMode": steering_mode, "MadsMinEngageSpeed": min_engage_mph}
 
   def get(self, key, return_default=False):
-    assert key == "MadsSteeringMode"
-    return self.steering_mode
+    return self.values[key]
 
 
-def _make(monkeypatch, enhanced=True, steering_mode=MadsSteeringModeOnBrake.DISENGAGE):
-  monkeypatch.setattr(car_specific, "Params", lambda: FakeParams(steering_mode))
+def _make(monkeypatch, enhanced=True, steering_mode=MadsSteeringModeOnBrake.DISENGAGE, min_engage_mph=0):
+  monkeypatch.setattr(car_specific, "Params", lambda: FakeParams(steering_mode, min_engage_mph))
   CP = structs.CarParams.new_message()
   CP.brand = 'rivian'
   CP_SP = structs.CarParamsSP()
@@ -41,10 +41,11 @@ def _make(monkeypatch, enhanced=True, steering_mode=MadsSteeringModeOnBrake.DISE
   return CarSpecificEventsSP(CP, CP_SP)
 
 
-def _step(ev, gear=GearShifter.drive, up2=None, brake=False, pcm_enable=False):
+def _step(ev, gear=GearShifter.drive, up2=None, brake=False, pcm_enable=False, v_ego_mph=30.):
   CS = structs.CarState.new_message()
   CS.gearShifter = gear
   CS.brakePressed = brake
+  CS.vEgo = v_ego_mph * CV.MPH_TO_MS
   if up2 is not None:
     CS.buttonEvents = [structs.CarState.ButtonEvent(pressed=up2, type=ButtonType.altButton2)]
   events = Events()
@@ -94,13 +95,28 @@ class TestRivianEnhancedMads:
     ev = _make(monkeypatch, steering_mode=MadsSteeringModeOnBrake.DISENGAGE)
     assert not _step(ev, brake=True)[0].has(EventNameSP.silentLkasDisable)
 
+  def test_min_engage_speed_blocks_stalk_engage_below_it(self, monkeypatch):
+    ev = _make(monkeypatch, min_engage_mph=5)
+    assert _step(ev, v_ego_mph=0)[0].has(EventNameSP.belowMadsMinEngageSpeed)
+    assert _step(ev, v_ego_mph=4.9)[0].has(EventNameSP.belowMadsMinEngageSpeed)
+    assert not _step(ev, v_ego_mph=5.1)[0].has(EventNameSP.belowMadsMinEngageSpeed)
+
+  def test_min_engage_speed_does_not_block_cruise_engage(self, monkeypatch):
+    ev = _make(monkeypatch, min_engage_mph=5)
+    assert not _step(ev, v_ego_mph=0, pcm_enable=True)[0].has(EventNameSP.belowMadsMinEngageSpeed)
+
+  def test_min_engage_speed_zero_disables_the_gate(self, monkeypatch):
+    ev = _make(monkeypatch, min_engage_mph=0)
+    assert not _step(ev, v_ego_mph=0)[0].has(EventNameSP.belowMadsMinEngageSpeed)
+
   def test_off_is_stock(self, monkeypatch):
-    ev = _make(monkeypatch, enhanced=False)
+    ev = _make(monkeypatch, enhanced=False, min_engage_mph=5)
     frames = [{"up2": True, "pcm_enable": True}, {"gear": GearShifter.park, "pcm_enable": True},
               {"gear": GearShifter.park, "brake": True}, {"brake": True}, {"gear": GearShifter.reverse},
-              {"gear": GearShifter.reverse}]
+              {"gear": GearShifter.reverse}, {"v_ego_mph": 0}]
     for kw in frames:
       events_sp, events = _step(ev, **kw)
       assert not events_sp.has(EventNameSP.lkasDisable)
       assert not events_sp.has(EventNameSP.silentLkasDisable)
+      assert not events_sp.has(EventNameSP.belowMadsMinEngageSpeed)
       assert events.has(EventName.pcmEnable) == kw.get("pcm_enable", False)
