@@ -2,13 +2,16 @@
 
 #include "opendbc/safety/declarations.h"
 
+// Forward declaration: defined in safety.h, included after mode headers
+static void stock_ecu_check(bool stock_ecu_detected);
+
 static uint8_t rivian_get_counter(const CANPacket_t *msg) {
-  // Signal: ESP_Status_Counter, VDM_PropStatus_Counter
+  // Signal: ESP_Status_Counter, VDM_PropStatus_Counter, VDM_AdasSts_Counter
   return msg->data[1] & 0xFU;
 }
 
 static uint32_t rivian_get_checksum(const CANPacket_t *msg) {
-  // Signal: ESP_Status_Checksum, VDM_PropStatus_Checksum
+  // Signal: ESP_Status_Checksum, VDM_PropStatus_Checksum, VDM_AdasSts_Checksum
   return msg->data[0];
 }
 
@@ -36,10 +39,15 @@ static uint32_t rivian_compute_checksum(const CANPacket_t *msg) {
     chksum = _rivian_compute_checksum(msg, 0x1D, 0xB1);
   } else if (msg->addr == 0x150U) {
     chksum = _rivian_compute_checksum(msg, 0x1D, 0x9A);
+  } else if (msg->addr == 0x162U) {
+    chksum = _rivian_compute_checksum(msg, 0x1D, 0xD1);
   } else {
   }
   return chksum;
 }
+
+// "Use enhanced Rivian MADS" setting. Off, MADS here is stock: no stalk MADS toggle.
+static bool rivian_enhanced_mads = false;
 
 static bool rivian_get_quality_flag_valid(const CANPacket_t *msg) {
   bool valid = false;
@@ -85,6 +93,25 @@ static void rivian_rx_hook(const CANPacket_t *msg) {
       update_sample(&angle_meas, angle_meas_new);
     }
 
+    // VDM_AdasSts: stalk position, used to manage MADS lateral state with enhanced MADS
+    if ((msg->addr == 0x162U) && rivian_enhanced_mads) {
+      const uint8_t user_adas_request = msg->data[7] & 0x7U;
+
+      // UP_1 (value 1) is the MADS toggle gesture. Drive mads_button_press so the panda MADS
+      // state machine can grant controls_allowed_lateral for lateral-only MADS without ACC.
+      // Only count it when stock ACC is NOT engaged: with ACC active openpilot treats UP_1 as
+      // cancel-only (no MADS toggle), so counting it here would desync the two MADS state
+      // machines, and the rejected 0x110 frames after a heartbeat-mismatch exit put counter
+      // gaps on the bus that fault the EPAS. While ACC is engaged, lateral is already granted
+      // via controls_allowed, so no capability is lost.
+      mads_button_press = ((user_adas_request == 1U) && !cruise_engaged_prev) ? MADS_BUTTON_PRESSED : MADS_BUTTON_NOT_PRESSED;
+
+      // UP_2 (value 2, past detent): do not force-disengage here. openpilot suppresses
+      // pcmEnable via altButton2 to prevent an unintended MADS engage. Forcing
+      // mads_exit_controls() would clear controls_allowed_lateral while openpilot MADS stays
+      // active, causing a lateral mismatch.
+    }
+
     // Brake pressed
     if (msg->addr == 0x38fU) {
       brake_pressed = (msg->data[2] >> 7) & 1U;
@@ -92,10 +119,14 @@ static void rivian_rx_hook(const CANPacket_t *msg) {
   }
 
   if (msg->bus == 2U) {
-    // Cruise state
+    // Cruise state. With enhanced MADS it also drives mads_state_update() via stock_ecu_check
+    // so that controls_allowed_lateral is updated every time ACM_Status arrives (100 Hz).
     if (msg->addr == 0x100U) {
       const int feature_status = msg->data[2] >> 5U;
       pcm_cruise_check(feature_status == 1);
+      if (rivian_enhanced_mads) {
+        stock_ecu_check(false);
+      }
     }
   }
 }
@@ -191,9 +222,24 @@ static safety_config rivian_init(uint16_t param) {
     {.msg = {{0x100, 2, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // ACM_Status (cruise state)
   };
 
+  // With enhanced MADS the stalk drives MADS, so its message is checked too.
+  static RxCheck rivian_enhanced_mads_rx_checks[] = {
+    {.msg = {{0x208, 0, 8, 50U, .max_counter = 14U}, { 0 }, { 0 }}},                                                             // ESP_Status (speed)
+    {.msg = {{0x150, 0, 7, 50U, .max_counter = 14U}, { 0 }, { 0 }}},                                                             // VDM_PropStatus (gas pedal & 2nd speed)
+    {.msg = {{0x380, 0, 5, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // EPAS_SystemStatus (driver torque)
+    {.msg = {{0x390, 0, 7, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // EPAS_AdasStatus (measured angle)
+    {.msg = {{0x38f, 0, 6, 50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},   // iBESP2 (brakes)
+    {.msg = {{0x100, 2, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // ACM_Status (cruise state)
+    {.msg = {{0x162, 0, 8, 50U, .max_counter = 14U, .ignore_quality_flag = true}, { 0 }, { 0 }}},                                // VDM_AdasSts (stalk requests)
+  };
+
   bool rivian_longitudinal = false;
 
   SAFETY_UNUSED(param);
+
+  const uint16_t RIVIAN_PARAM_SP_ENHANCED_MADS = 1;
+  rivian_enhanced_mads = GET_FLAG(current_safety_param_sp, RIVIAN_PARAM_SP_ENHANCED_MADS);
+
   #ifdef ALLOW_DEBUG
     const int FLAG_RIVIAN_LONG_CONTROL = 1;
     rivian_longitudinal = GET_FLAG(param, FLAG_RIVIAN_LONG_CONTROL);
@@ -202,8 +248,12 @@ static safety_config rivian_init(uint16_t param) {
   // FIXME: cppcheck thinks that rivian_longitudinal is always false. This is not true
   // if ALLOW_DEBUG is defined but cppcheck is run without ALLOW_DEBUG
   // cppcheck-suppress knownConditionTrueFalse
-  return rivian_longitudinal ? BUILD_SAFETY_CFG(rivian_rx_checks, RIVIAN_LONG_TX_MSGS) : \
-                               BUILD_SAFETY_CFG(rivian_rx_checks, RIVIAN_TX_MSGS);
+  safety_config ret = rivian_longitudinal ? BUILD_SAFETY_CFG(rivian_rx_checks, RIVIAN_LONG_TX_MSGS) : \
+                                            BUILD_SAFETY_CFG(rivian_rx_checks, RIVIAN_TX_MSGS);
+  if (rivian_enhanced_mads) {
+    SET_RX_CHECKS(rivian_enhanced_mads_rx_checks, ret);
+  }
+  return ret;
 }
 
 const safety_hooks rivian_hooks = {

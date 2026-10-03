@@ -9,6 +9,7 @@ from opendbc.car.rivian.riviancan import checksum as _checksum
 from opendbc.car.structs import CarParams
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.safety.tests.libsafety import libsafety_py
+from opendbc.sunnypilot.car.rivian.values import RivianSafetyFlagsSP
 import opendbc.safety.tests.common as common
 from opendbc.safety.tests.common import CANPackerSafety
 
@@ -22,6 +23,8 @@ def checksum(msg):
     ret[0] = _checksum(ret[1:], 0x1D, 0xB1)
   elif addr == 0x150:
     ret[0] = _checksum(ret[1:], 0x1D, 0x9A)
+  elif addr == 0x162:
+    ret[0] = _checksum(ret[1:], 0x1D, 0xD1)
 
   return addr, ret, bus
 
@@ -99,6 +102,45 @@ class TestRivianSafetyBase(common.CarSafetyTest, common.AngleSteeringSafetyTest,
   def _pcm_status_msg(self, enable):
     values = {"ACM_FeatureStatus": enable, "ACM_Unkown1": 1}
     return self.packer.make_can_msg_safety("ACM_Status", 2, values)
+
+  # "Use enhanced Rivian MADS". Off, the panda has no MADS button, as in stock sunnypilot.
+  ENHANCED_MADS = False
+  cnt_stalk = 0
+
+  def _set_safety_hooks(self, param):
+    self.safety.set_current_safety_param_sp(RivianSafetyFlagsSP.ENHANCED_MADS if self.ENHANCED_MADS else 0)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.rivian, param)
+
+  def _stalk_msg(self, req):
+    # VDM_AdasSts.VDM_UserAdasRequest: 0=IDLE, 1=UP_1 (the MADS toggle), 2=UP_2
+    values = {"VDM_UserAdasRequest": req, "VDM_AdasStatus_Counter": self.cnt_stalk % 15}
+    self.__class__.cnt_stalk += 1
+    return self.packer.make_can_msg_safety("VDM_AdasSts", 0, values, fix_checksum=checksum)
+
+  def _lkas_button_msg(self, enabled):
+    if not self.ENHANCED_MADS:
+      raise NotImplementedError
+    return self._stalk_msg(1 if enabled else 0)
+
+  def test_mads_button_only_with_enhanced_mads(self):
+    """UP_1 is the MADS button only with enhanced MADS, and only while stock ACC is NOT engaged:
+    with ACC on, openpilot treats UP_1 as cancel-only, so counting it would desync the panda."""
+    self.safety.set_mads_button_press(-1)
+    for cruise in (False, True):
+      self._rx(self._pcm_status_msg(1 if cruise else 0))
+      self._rx(self._stalk_msg(1))
+      if self.ENHANCED_MADS:
+        expected = 0 if cruise else 1  # MADS_BUTTON_NOT_PRESSED / MADS_BUTTON_PRESSED
+      else:
+        expected = -1  # MADS_BUTTON_UNAVAILABLE
+      self.assertEqual(self.safety.get_mads_button_press(), expected, f"cruise={cruise}")
+      self._rx(self._stalk_msg(0))
+
+  def test_stalk_message_checked_only_with_enhanced_mads(self):
+    # A stalk message with a bad checksum is rejected only when the stalk is part of MADS.
+    msg = self._stalk_msg(0)
+    msg[0].data[0] ^= 0xff
+    self.assertEqual(self._rx(msg), not self.ENHANCED_MADS)
 
   def _accel_msg(self, accel: float):
     values = {"ACM_AccelerationRequest": accel}
@@ -206,7 +248,7 @@ class TestRivianStockSafety(TestRivianSafetyBase):
     self.VM = VehicleModel(get_safety_CP())
     self.packer = CANPackerSafety("rivian_primary_actuator")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.rivian, 0)
+    self._set_safety_hooks(0)
     self.safety.init_tests()
 
   def test_adas_status(self):
@@ -228,8 +270,16 @@ class TestRivianLongitudinalSafety(TestRivianSafetyBase):
     self.VM = VehicleModel(get_safety_CP())
     self.packer = CANPackerSafety("rivian_primary_actuator")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.rivian, RivianSafetyFlags.LONG_CONTROL)
+    self._set_safety_hooks(RivianSafetyFlags.LONG_CONTROL)
     self.safety.init_tests()
+
+
+class TestRivianStockSafetyEnhancedMads(TestRivianStockSafety):
+  ENHANCED_MADS = True
+
+
+class TestRivianLongitudinalSafetyEnhancedMads(TestRivianLongitudinalSafety):
+  ENHANCED_MADS = True
 
 
 class TestRivianIgnition(unittest.TestCase):
