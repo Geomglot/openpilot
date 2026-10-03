@@ -28,3 +28,11 @@ class TestRivianMadsCarController:
     assert _step(mc, False) == (False, False)
     assert _step(mc, True) == (True, True)
     assert _step(mc, False) == (False, False)
+
+  def test_lateral_only_acts_in_drive(self):
+    # steerAtStandstill must not let the angle controller move the wheel in Park, Reverse or Neutral
+    for gear in (GearShifter.park, GearShifter.reverse, GearShifter.neutral):
+      mc = MadsCarController()
+      assert _step(mc, True, gear=gear) == (False, False), gear
+    mc = MadsCarController()
+    assert _step(mc, True, gear=GearShifter.drive) == (True, True)
