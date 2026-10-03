@@ -11,6 +11,7 @@ from opendbc.car import Bus, structs
 from opendbc.can.parser import CANParser
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.rivian.values import DBC
+from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -30,6 +31,43 @@ class CarStateExt:
     self.distance_button = 0
     self.increase_counter = 0
     self.decrease_counter = 0
+    self.vdm_user_adas_request = 0
+    self._lkas_pending = False
+
+  def update_stalk_controls(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> list:
+    cp = can_parsers[Bus.pt]
+    vdm = int(cp.vl["VDM_AdasSts"]["VDM_UserAdasRequest"])
+
+    button_events = []
+
+    # Emit the deferred lkas event only if the current frame is not UP_2.
+    # This 1-frame lookahead prevents the CAN transition through UP_1 on the
+    # way to UP_2 from accidentally engaging or changing MADS state.
+    if self._lkas_pending:
+      if vdm != 2:
+        button_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.lkas))
+      self._lkas_pending = False
+
+    # UP_1 rising edge (from IDLE or DOWN only, not from UP_2 release).
+    # In DISENGAGE mode with ACC active, suppress: UP_1 cancels Rivian ACC natively
+    # and pcmDisable is stripped by mads.update_events(), leaving MADS in Mode B.
+    # Generating lkas here would also fire manualSteeringRequired and kill MADS.
+    # The brake mode comes from alternativeExperience, which card sets after this object is built.
+    disengage_on_brake = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.MADS_DISENGAGE_LATERAL_ON_BRAKE)
+    if vdm == 1 and self.vdm_user_adas_request not in (1, 2):
+      if not (disengage_on_brake and ret.cruiseState.enabled):
+        self._lkas_pending = True
+
+    # Signal UP_2 state via altButton2 so car_specific.py can fire lkasDisable
+    # and suppress pcmEnable. UP_2 disengages ACC; without this, MADS can persist
+    # in Mode B (lateral only) after ACC cancels.
+    if vdm == 2 and self.vdm_user_adas_request != 2:
+      button_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.altButton2))
+    elif vdm != 2 and self.vdm_user_adas_request == 2:
+      button_events.append(structs.CarState.ButtonEvent(pressed=False, type=ButtonType.altButton2))
+
+    self.vdm_user_adas_request = vdm
+    return button_events
 
   def update_longitudinal_upgrade(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp_park = can_parsers[Bus.alt]
@@ -90,6 +128,12 @@ class CarStateExt:
   def update(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     if self.CP_SP.flags & RivianFlagsSP.LONGITUDINAL_HARNESS_UPGRADE:
       self.update_longitudinal_upgrade(ret, can_parsers)
+
+    # The MADS stalk is part of "Use enhanced Rivian MADS". Off, MADS is stock: no stalk toggle.
+    if self.CP_SP.flags & RivianFlagsSP.ENHANCED_MADS:
+      stalk_events = self.update_stalk_controls(ret, can_parsers)
+      if stalk_events:
+        ret.buttonEvents = [*ret.buttonEvents, *stalk_events]
 
   @staticmethod
   def get_parser(CP, CP_SP) -> dict[StrEnum, CANParser]:
