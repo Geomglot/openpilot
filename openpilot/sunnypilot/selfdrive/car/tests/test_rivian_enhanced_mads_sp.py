@@ -72,6 +72,18 @@ class TestRivianEnhancedMads:
            (GearShifter.drive, GearShifter.park, GearShifter.park, GearShifter.park)]
     assert out == [False, True, True, False]
 
+  def test_reverse_entry_disengages_on_two_frames(self, monkeypatch):
+    # frame N loses to silentLkasDisable (paused), frame N+1 lands State.disabled
+    ev = _make(monkeypatch)
+    R, D = GearShifter.reverse, GearShifter.drive
+    out = [_step(ev, gear=g)[0].has(EventNameSP.lkasDisable) for g in (D, R, R, R, D, R, R)]
+    assert out == [False, True, True, False, False, True, True]
+
+  def test_single_frame_reverse_blip(self, monkeypatch):
+    ev = _make(monkeypatch)
+    R, D = GearShifter.reverse, GearShifter.drive
+    assert [_step(ev, gear=g)[0].has(EventNameSP.lkasDisable) for g in (D, R, D)] == [False, True, False]
+
   def test_pause_mode_holds_pause_for_the_whole_brake_press(self, monkeypatch):
     ev = _make(monkeypatch, steering_mode=MadsSteeringModeOnBrake.PAUSE)
     for _ in range(3):
@@ -85,7 +97,8 @@ class TestRivianEnhancedMads:
   def test_off_is_stock(self, monkeypatch):
     ev = _make(monkeypatch, enhanced=False)
     frames = [{"up2": True, "pcm_enable": True}, {"gear": GearShifter.park, "pcm_enable": True},
-              {"gear": GearShifter.park, "brake": True}, {"brake": True}]
+              {"gear": GearShifter.park, "brake": True}, {"brake": True}, {"gear": GearShifter.reverse},
+              {"gear": GearShifter.reverse}]
     for kw in frames:
       events_sp, events = _step(ev, **kw)
       assert not events_sp.has(EventNameSP.lkasDisable)
