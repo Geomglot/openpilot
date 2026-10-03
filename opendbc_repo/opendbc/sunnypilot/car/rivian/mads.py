@@ -22,7 +22,9 @@ class MadsCarController:
 
   def mads_status_update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS: CarStateBase) -> MadsDataSP:
     if CC_SP.mads.available:
-      self.lka_icon_states = self.lat_active
+      # symState must accompany actToi from the first active frame: the EPAS rejects
+      # actToi=1 with symState=0 and fires H_CAN_EPSS_ToiFlt (steerTempUnavailable loop)
+      self.lka_icon_states = CC.latActive
       self.lat_active = CC.latActive
     else:
       self.lka_icon_states = CC.enabled
