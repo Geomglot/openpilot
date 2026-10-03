@@ -9,6 +9,7 @@ from openpilot.common.params import Params
 from opendbc.car import structs
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP, HyundaiSafetyFlagsSP
+from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
 from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
 
 
@@ -22,8 +23,11 @@ class MadsSteeringModeOnBrake:
 
 
 def get_mads_limited_brands(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params: Params) -> bool:
+  # Rivian is limited (Disengage only) unless "Use enhanced Rivian MADS" is on. That setting brings
+  # the MADS stalk and its consistent engage/disengage signals, so the full steering-mode choice applies.
   if CP.brand == 'rivian':
-    return True
+    return not CP_SP.flags & RivianFlagsSP.ENHANCED_MADS
+
   if CP.brand == 'tesla':
     if not CP_SP.flags & TeslaFlagsSP.HAS_VEHICLE_BUS:
       return True
@@ -65,12 +69,19 @@ def set_car_specific_params(CP: structs.CarParams, CP_SP: structs.CarParamsSP, p
   # MADS Partial Support
   # MADS is currently partially supported for these platforms due to lack of consistent states to engage controls
   # Only MadsSteeringModeOnBrake.DISENGAGE is supported for these platforms
-  # TODO-SP: To enable MADS full support for Rivian and most Tesla, identify consistent signals for MADS toggling
+  # TODO-SP: To enable MADS full support for most Tesla, identify consistent signals for MADS toggling
   mads_partial_support = get_mads_limited_brands(CP, CP_SP, params)
   if mads_partial_support:
     params.put("MadsSteeringMode", 2, block=True)
     params.put_bool("MadsUnifiedEngagementMode", True, block=True)
 
+  # Rivian engages lateral with cruise in both MADS variants, so UEM is always on.
+  if CP.brand == "rivian":
+    params.put_bool("MadsUnifiedEngagementMode", True, block=True)
+
   # no ACC MAIN button for these brands
   if CP.brand in MADS_NO_ACC_MAIN_BUTTON:
-    params.remove("MadsMainCruiseAllowed")
+    if CP.brand == "rivian" and CP_SP.flags & RivianFlagsSP.ENHANCED_MADS:
+      params.put_bool("MadsMainCruiseAllowed", False)
+    else:
+      params.remove("MadsMainCruiseAllowed")

@@ -9,11 +9,15 @@ from openpilot.cereal import log, custom
 from opendbc.car import structs
 
 from opendbc.car.chrysler.values import RAM_DT
+from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
+from openpilot.common.params import Params
 from openpilot.selfdrive.selfdrived.events import Events
+from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 
 EventName = log.OnroadEvent.EventName
 EventNameSP = custom.OnroadEventSP.EventName
+ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 
 
@@ -23,6 +27,13 @@ class CarSpecificEventsSP:
     self.CP_SP = CP_SP
 
     self.low_speed_alert = False
+    self._rivian_up2_active = False
+    self._rivian_prev_in_park = False
+    self._rivian_park_disable_pending = False
+    if self.CP.brand == 'rivian':
+      # "Use enhanced Rivian MADS". Off, none of the Rivian MADS handling below runs and MADS is stock.
+      self._rivian_enhanced_mads = bool(CP_SP.flags & RivianFlagsSP.ENHANCED_MADS)
+      self._rivian_steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, Params())
 
   def update(self, CS: structs.CarState, events: Events):
     events_sp = EventsSP()
@@ -48,4 +59,44 @@ class CarSpecificEventsSP:
           if events.has(EventName.resumeRequired):
             events.remove(EventName.resumeRequired)
 
+    elif self.CP.brand == 'rivian':
+      if self._rivian_enhanced_mads:
+        self._update_rivian_enhanced_mads(CS, events, events_sp)
+
     return events_sp
+
+  def _update_rivian_enhanced_mads(self, CS: structs.CarState, events: Events, events_sp: EventsSP) -> None:
+    in_park = CS.gearShifter == GearShifter.park
+    for be in CS.buttonEvents:
+      if be.type == ButtonType.altButton2:
+        self._rivian_up2_active = be.pressed
+        # UP_2 is a full-cancel gesture: disengage MADS lateral so it doesn't persist as
+        # lateral-only MADS after ACC cancels. lkasDisable is ET.USER_DISABLE and works from
+        # any active MADS state.
+        if be.pressed:
+          events_sp.add(EventNameSP.lkasDisable)
+
+    # Park entry: full MADS disengage, same as UP_2.
+    if in_park and not self._rivian_prev_in_park:
+      events_sp.add(EventNameSP.lkasDisable)
+      self._rivian_park_disable_pending = True
+    elif in_park and self._rivian_park_disable_pending:
+      # Fire lkasDisable a second time so that State.disabled wins over State.paused. On frame N,
+      # wrongGear fires too and mads.update_events() adds silentLkasDisable, which the state
+      # machine lets win, so MADS lands in paused. On frame N+1 MADS is already paused, no
+      # silentLkasDisable is added, and the lone lkasDisable takes it to disabled.
+      events_sp.add(EventNameSP.lkasDisable)
+      self._rivian_park_disable_pending = False
+    if not in_park:
+      self._rivian_park_disable_pending = False
+    self._rivian_prev_in_park = in_park
+
+    # Do not let cruise engage MADS while UP_2 is held or in Park.
+    if self._rivian_up2_active or in_park:
+      events.remove(EventName.pcmEnable)
+
+    # PAUSE mode: keep MADS lateral paused for the whole brake press. silentLkasDisable
+    # (ET.USER_DISABLE) beats the silentLkasEnable (ET.ENABLE) that mads.py adds, because
+    # USER_DISABLE is checked first. Covers standstill, where pedalPressed stops firing.
+    if CS.brakePressed and self._rivian_steering_mode_on_brake == MadsSteeringModeOnBrake.PAUSE:
+      events_sp.add(EventNameSP.silentLkasDisable)
