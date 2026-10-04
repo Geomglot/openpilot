@@ -7,17 +7,22 @@ See the LICENSE.md file in the root directory for more details.
 "Use enhanced Rivian MADS": the Rivian MADS handling in CarSpecificEventsSP only runs with the
 setting on. With it off, MADS is stock and this code emits nothing.
 """
+from unittest.mock import MagicMock
+
 from openpilot.cereal import custom, log
 from opendbc.car import structs
 from openpilot.common.constants import CV
 from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
 from openpilot.selfdrive.selfdrived.events import Events
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake
+from openpilot.sunnypilot.mads.mads import ModularAssistiveDrivingSystem
 from openpilot.sunnypilot.selfdrive.car import car_specific
 from openpilot.sunnypilot.selfdrive.car.car_specific import CarSpecificEventsSP
+from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 
 EventName = log.OnroadEvent.EventName
 EventNameSP = custom.OnroadEventSP.EventName
+State = custom.ModularAssistiveDrivingSystem.ModularAssistiveDrivingSystemState
 ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 
@@ -120,3 +125,92 @@ class TestRivianEnhancedMads:
       assert not events_sp.has(EventNameSP.silentLkasDisable)
       assert not events_sp.has(EventNameSP.belowMadsMinEngageSpeed)
       assert events.has(EventName.pcmEnable) == kw.get("pcm_enable", False)
+
+
+class TestRivianEnhancedMadsWithStateMachine:
+  """Runs the real MADS state machine on the events this code emits, plus the gear and pedal
+  events selfdrived would add, to check the resulting MADS state rather than single events."""
+
+  def _setup(self, monkeypatch, steering_mode):
+    ev = _make(monkeypatch, steering_mode=steering_mode)
+    sd = MagicMock()
+    sd.CP = structs.CarParams()
+    sd.CP.brand = 'rivian'
+    sd.CP_SP = ev.CP_SP
+    sd.params = MagicMock()
+    sd.params.get_bool = MagicMock(side_effect=lambda k: {"Mads": True, "MadsUnifiedEngagementMode": True}.get(k, False))
+    sd.params.get = MagicMock(return_value=steering_mode)
+    sd.events = Events()
+    sd.events_sp = EventsSP()
+    sd.enabled = sd.enabled_prev = False
+    sd.initialized = True
+    sd.CS_prev = structs.CarState.new_message()
+    sd.sm = {'pandaStates': []}
+    sd.state_machine = MagicMock()
+    mads = ModularAssistiveDrivingSystem(sd)
+    mads.enabled_toggle = True
+    mads.steering_mode_on_brake = steering_mode
+    return ev, mads, sd
+
+  def _frame(self, ev, mads, sd, gear=GearShifter.drive, brake=False, v_ego_mph=0.):
+    CS = structs.CarState.new_message()
+    CS.gearShifter = gear
+    CS.brakePressed = brake
+    CS.vEgo = v_ego_mph * CV.MPH_TO_MS
+    CS.standstill = v_ego_mph == 0.
+    CS.cruiseState.available = True
+    sd.events.clear()
+    sd.events_sp.clear()
+    # what selfdrived adds before MADS runs
+    if gear == GearShifter.park:
+      sd.events.add(EventName.wrongGear)
+    elif gear == GearShifter.reverse:
+      sd.events.add(EventName.reverseGear)
+    if brake and (not sd.CS_prev.brakePressed or not CS.standstill):
+      sd.events.add(EventName.pedalPressed)
+    for name in ev.update(CS, sd.events).names:
+      sd.events_sp.add(name)
+    mads.update(CS)
+    sd.CS_prev = CS
+    return mads.state_machine.state
+
+  def _brake_to_stop_then_shift(self, monkeypatch, steering_mode, gear):
+    ev, mads, sd = self._setup(monkeypatch, steering_mode)
+    mads.state_machine.state = State.enabled
+    mads.enabled = mads.active = True
+    self._frame(ev, mads, sd, brake=True, v_ego_mph=10.)
+    for _ in range(5):
+      self._frame(ev, mads, sd, brake=True)
+    return [self._frame(ev, mads, sd, gear=gear, brake=True) for _ in range(3)], ev, mads, sd
+
+  def test_pause_mode_brake_held_pauses(self, monkeypatch):
+    ev, mads, sd = self._setup(monkeypatch, MadsSteeringModeOnBrake.PAUSE)
+    mads.state_machine.state = State.enabled
+    mads.enabled = mads.active = True
+    self._frame(ev, mads, sd, brake=True, v_ego_mph=10.)
+    assert [self._frame(ev, mads, sd, brake=True) for _ in range(5)] == [State.paused] * 5
+    assert self._frame(ev, mads, sd) == State.enabled
+
+  def test_pause_mode_park_with_brake_held_switches_off(self, monkeypatch):
+    states, ev, mads, sd = self._brake_to_stop_then_shift(monkeypatch, MadsSteeringModeOnBrake.PAUSE, GearShifter.park)
+    assert states[-1] == State.disabled
+    # stays off after Drive is selected and the brake is released
+    self._frame(ev, mads, sd, brake=True)
+    assert self._frame(ev, mads, sd) == State.disabled
+
+  def test_pause_mode_reverse_with_brake_held_switches_off(self, monkeypatch):
+    states, ev, mads, sd = self._brake_to_stop_then_shift(monkeypatch, MadsSteeringModeOnBrake.PAUSE, GearShifter.reverse)
+    assert states[-1] == State.disabled
+    self._frame(ev, mads, sd, brake=True)
+    assert self._frame(ev, mads, sd) == State.disabled
+
+  def test_remain_active_park_with_brake_held_switches_off(self, monkeypatch):
+    states, _, _, _ = self._brake_to_stop_then_shift(monkeypatch, MadsSteeringModeOnBrake.REMAIN_ACTIVE, GearShifter.park)
+    assert states[-1] == State.disabled
+
+  def test_pause_mode_park_without_brake_switches_off(self, monkeypatch):
+    ev, mads, sd = self._setup(monkeypatch, MadsSteeringModeOnBrake.PAUSE)
+    mads.state_machine.state = State.enabled
+    mads.enabled = mads.active = True
+    self._frame(ev, mads, sd)
+    assert [self._frame(ev, mads, sd, gear=GearShifter.park) for _ in range(3)][-1] == State.disabled
