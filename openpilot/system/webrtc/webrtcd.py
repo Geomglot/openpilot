@@ -236,6 +236,8 @@ class StreamSession:
     builder = WebRTCAnswerBuilder(body.sdp, bind_address=_default_route_ip())
 
     self.enabled = body.enabled
+    # opview viewers sit on the local network for the whole drive, so no session cap
+    self.session_timeout = None if self.params.get_bool("OpviewEnabled") else SESSION_TIMEOUT_SECONDS
     self.video_tracks = []
     for camera in body.cameras:
       track = LiveStreamVideoStreamTrack(camera, self.enabled)
@@ -321,9 +323,9 @@ class StreamSession:
 
   async def run_normal_session(self):
     try:
-      await asyncio.wait_for(self.stream.wait_for_disconnection(), timeout=SESSION_TIMEOUT_SECONDS)
+      await asyncio.wait_for(self.stream.wait_for_disconnection(), timeout=self.session_timeout)
     except TimeoutError:
-      self.logger.warning("Stream session (%s) timed out after %d s", self.identifier, SESSION_TIMEOUT_SECONDS)
+      self.logger.warning("Stream session (%s) timed out after %d s", self.identifier, self.session_timeout)
       try:
         self.stream.get_messaging_channel().send(json.dumps({"type": "disconnect", "data": "Session timed out"}))
       except Exception:
@@ -637,11 +639,13 @@ def webrtcd_thread(host: str, port: int):
 
 def main():
   parser = argparse.ArgumentParser(description="WebRTC daemon")
-  parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to listen on")
+  parser.add_argument("--host", type=str, default=None, help="Host to listen on")
   parser.add_argument("--port", type=int, default=5001, help="Port to listen on")
   args = parser.parse_args()
 
-  webrtcd_thread(args.host, args.port)
+  # opview connects from another device on the local network
+  host = args.host or ("0.0.0.0" if Params().get_bool("OpviewEnabled") else "127.0.0.1")
+  webrtcd_thread(host, args.port)
 
 
 if __name__=="__main__":

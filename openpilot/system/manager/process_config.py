@@ -68,6 +68,10 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("IsLiveStreaming")
 
+def opview(started: bool, params: Params, CP: car.CarParams) -> bool:
+  # keep the livestream stack up while driving for the opview app on the local network
+  return started and params.get_bool("OpviewEnabled")
+
 def use_copyparty(started, params, CP: car.CarParams) -> bool:
   return bool(params.get_bool("EnableCopyparty"))
 
@@ -111,7 +115,7 @@ procs = [
 
   NativeProcess("loggerd", "openpilot/system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "openpilot/system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], or_(livestream, notcar)),
+  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], or_(livestream, notcar, opview)),
   PythonProcess("logmessaged", "openpilot.system.logmessaged", always_run),
 
   NativeProcess("camerad", "openpilot/system/camerad", ["./camerad"], or_(driverview, livestream), enabled=not WEBCAM),
@@ -156,7 +160,7 @@ procs = [
 
   # debug procs
   NativeProcess("bridge", "openpilot/cereal/messaging", ["./bridge"], notcar),
-  PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar)),
+  PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar, opview)),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
 
   # sunnylink <3
