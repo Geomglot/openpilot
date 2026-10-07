@@ -35,6 +35,24 @@ OPVIEW_MIN_GAP_S = 0.7 / OPVIEW_MAX_RATE_HZ
 OPVIEW_PARAMS_INTERVAL_S = 1.
 
 
+def _xyz(v) -> dict[str, list[float]]:
+  # metres, rounded to the millimetre: far shorter JSON than full float precision
+  return {"x": [round(a, 3) for a in v.x], "y": [round(a, 3) for a in v.y], "z": [round(a, 3) for a in v.z]}
+
+
+def opview_model(m) -> dict[str, Any]:
+  # only the modelV2 fields opview draws (path, lane lines, road edges, acceleration);
+  # the full message is ~32 kB of JSON and most of webrtcd's work at 20 Hz
+  return {
+    "position": _xyz(m.position),
+    "laneLines": [_xyz(line) for line in m.laneLines],
+    "laneLineProbs": [round(p, 3) for p in m.laneLineProbs],
+    "roadEdges": [_xyz(edge) for edge in m.roadEdges],
+    "roadEdgeStds": [round(sd, 3) for sd in m.roadEdgeStds],
+    "acceleration": {"x": [round(a, 3) for a in m.acceleration.x]},
+  }
+
+
 # ice candidate parser for logging
 def _ice_candidates(sdp: str) -> list[str]:
   return [line.removeprefix("a=") for line in sdp.splitlines() if line.startswith("a=candidate:")]
@@ -148,7 +166,10 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
         if now - self._last_sent.get(service, 0.) < OPVIEW_MIN_GAP_S:
           continue
         self._last_sent[service] = now
-      msg_dict = self.to_json(self.sm[service])
+      if self.opview and service == "modelV2":
+        msg_dict = opview_model(self.sm[service])
+      else:
+        msg_dict = self.to_json(self.sm[service])
       mono_time, valid = self.sm.logMonoTime[service], self.sm.valid[service]
       outgoing_msg = {"type": service, "logMonoTime": mono_time, "valid": valid, "data": msg_dict}
       self._send(json.dumps(outgoing_msg).encode())
