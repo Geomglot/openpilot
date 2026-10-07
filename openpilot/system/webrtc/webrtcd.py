@@ -20,7 +20,7 @@ from typing import Any
 
 from openpilot.system.webrtc.helpers import StreamRequestBody
 from openpilot.system.webrtc.schema import generate_field
-from openpilot.common.params import Params
+from openpilot.common.params import Params, UnknownKeyName
 from openpilot.common.swaglog import cloudlog
 from openpilot.cereal import messaging, log
 from openpilot.cereal.services import SERVICE_LIST
@@ -38,6 +38,14 @@ OPVIEW_PARAMS_INTERVAL_S = 1.
 def _xyz(v) -> dict[str, list[float]]:
   # metres, rounded to the millimetre: far shorter JSON than full float precision
   return {"x": [round(a, 3) for a in v.x], "y": [round(a, 3) for a in v.y], "z": [round(a, 3) for a in v.z]}
+
+
+def opview_enabled(params: Params) -> bool:
+  # a prebuilt whose params library predates this setting does not know the key: treat as off
+  try:
+    return params.get_bool("OpviewEnabled")
+  except UnknownKeyName:
+    return False
 
 
 def opview_model(m) -> dict[str, Any]:
@@ -144,20 +152,33 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       self._car = (cp.brand, cp.flags)
     return self._car
 
+  def _param_bool(self, key: str) -> bool:
+    # not every branch has every setting; an unknown one counts as off
+    try:
+      return self.params.get_bool(key)
+    except UnknownKeyName:
+      return False
+
+  def _param_int(self, key: str) -> int:
+    try:
+      return int(self.params.get(key, return_default=True) or 0)
+    except (UnknownKeyName, TypeError, ValueError):
+      return 0
+
   def _opview_params(self) -> dict[str, Any]:
     brand, flags = self._car_brand_flags()
     return {
       "CarBrand": brand,
       "CarFlags": flags,
-      "IsMetric": self.params.get_bool("IsMetric"),
-      "SpeedLimitMode": int(self.params.get("SpeedLimitMode", return_default=True) or 0),
-      "RoadNameToggle": self.params.get_bool("RoadNameToggle"),
-      "RivianForceTorqueSteer": self.params.get_bool("RivianForceTorqueSteer"),
-      "TrueVEgoUI": self.params.get_bool("TrueVEgoUI"),
-      "SPLiveSpeedCorrectionEnabled": self.params.get_bool("SPLiveSpeedCorrectionEnabled"),
-      "SPCruiseSpeedOffset": int(self.params.get("SPCruiseSpeedOffset", return_default=True) or 0),
-      "ShowTurnSignals": self.params.get_bool("ShowTurnSignals"),
-      "BlindSpot": self.params.get_bool("BlindSpot"),
+      "IsMetric": self._param_bool("IsMetric"),
+      "SpeedLimitMode": self._param_int("SpeedLimitMode"),
+      "RoadNameToggle": self._param_bool("RoadNameToggle"),
+      "RivianForceTorqueSteer": self._param_bool("RivianForceTorqueSteer"),
+      "TrueVEgoUI": self._param_bool("TrueVEgoUI"),
+      "SPLiveSpeedCorrectionEnabled": self._param_bool("SPLiveSpeedCorrectionEnabled"),
+      "SPCruiseSpeedOffset": self._param_int("SPCruiseSpeedOffset"),
+      "ShowTurnSignals": self._param_bool("ShowTurnSignals"),
+      "BlindSpot": self._param_bool("BlindSpot"),
     }
 
   def update(self):
@@ -312,7 +333,7 @@ class StreamSession:
 
     self.enabled = body.enabled
     # opview viewers sit on the local network for the whole drive, so no session cap
-    self.opview = self.params.get_bool("OpviewEnabled")
+    self.opview = opview_enabled(self.params)
     self.session_timeout = None if self.opview else SESSION_TIMEOUT_SECONDS
     self.video_tracks = []
     for camera in body.cameras:
@@ -731,7 +752,7 @@ def main():
   args = parser.parse_args()
 
   # opview connects from another device on the local network
-  opview = Params().get_bool("OpviewEnabled")
+  opview = opview_enabled(Params())
   host = args.host or ("0.0.0.0" if opview else "127.0.0.1")
   if opview:
     avoid_keyframe_request_deadlock()
