@@ -26,6 +26,10 @@ from openpilot.cereal import messaging, log
 
 SESSION_TIMEOUT_SECONDS = 300
 
+# opview redraws at the model rate, so faster services are thinned to this many messages per second
+OPVIEW_MAX_RATE_HZ = 20.
+OPVIEW_PARAMS_INTERVAL_S = 1.
+
 
 # ice candidate parser for logging
 def _ice_candidates(sdp: str) -> list[str]:
@@ -69,12 +73,17 @@ class AsyncTaskRunner:
 
 
 class CerealOutgoingMessageProxy(AsyncTaskRunner):
-  def __init__(self, services: list[str], enabled: bool = True):
+  def __init__(self, services: list[str], enabled: bool = True, opview: bool = False):
     super().__init__()
     self.services = list(services)
     self.sm = messaging.SubMaster(self.services)
     self.channels = []
     self._enabled = enabled
+    # opview: cap each service's rate and also send the UI settings opview cannot otherwise see
+    self.opview = opview
+    self.params = Params()
+    self._last_sent: dict[str, float] = {}
+    self._last_params_sent = 0.
 
   def add_channel(self, channel):
     self.channels.append(channel)
@@ -94,20 +103,40 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
 
     return msg_dict
 
+  def _send(self, encoded_msg: bytes):
+    for channel in self.channels:
+      if not channel.is_open():
+        continue
+      channel.send(encoded_msg)
+
+  def _opview_params(self) -> dict[str, Any]:
+    return {
+      "IsMetric": self.params.get_bool("IsMetric"),
+      "SpeedLimitMode": int(self.params.get("SpeedLimitMode", return_default=True) or 0),
+      "RoadNameToggle": self.params.get_bool("RoadNameToggle"),
+      "RivianForceTorqueSteer": self.params.get_bool("RivianForceTorqueSteer"),
+    }
+
   def update(self):
     # this is blocking in async context...
     self.sm.update(0)
+    now = time.monotonic()
     for service, updated in self.sm.updated.items():
       if not updated:
         continue
+      if self.opview:
+        if now - self._last_sent.get(service, 0.) < 1. / OPVIEW_MAX_RATE_HZ:
+          continue
+        self._last_sent[service] = now
       msg_dict = self.to_json(self.sm[service])
       mono_time, valid = self.sm.logMonoTime[service], self.sm.valid[service]
       outgoing_msg = {"type": service, "logMonoTime": mono_time, "valid": valid, "data": msg_dict}
-      encoded_msg = json.dumps(outgoing_msg).encode()
-      for channel in self.channels:
-        if not channel.is_open():
-          continue
-        channel.send(encoded_msg)
+      self._send(json.dumps(outgoing_msg).encode())
+
+    if self.opview and now - self._last_params_sent >= OPVIEW_PARAMS_INTERVAL_S:
+      self._last_params_sent = now
+      self._send(json.dumps({"type": "opviewParams", "logMonoTime": time.monotonic_ns(), "valid": True,
+                             "data": self._opview_params()}).encode())
 
   async def run(self):
     while True:
@@ -237,7 +266,8 @@ class StreamSession:
 
     self.enabled = body.enabled
     # opview viewers sit on the local network for the whole drive, so no session cap
-    self.session_timeout = None if self.params.get_bool("OpviewEnabled") else SESSION_TIMEOUT_SECONDS
+    self.opview = self.params.get_bool("OpviewEnabled")
+    self.session_timeout = None if self.opview else SESSION_TIMEOUT_SECONDS
     self.video_tracks = []
     for camera in body.cameras:
       track = LiveStreamVideoStreamTrack(camera, self.enabled)
@@ -254,7 +284,7 @@ class StreamSession:
     if len(body.bridge_services_in) > 0:
       self.incoming_bridge = CerealIncomingMessageProxy(self.shared_pub_master)
     if len(body.bridge_services_out) > 0:
-      self.outgoing_bridge = CerealOutgoingMessageProxy(body.bridge_services_out, self.enabled)
+      self.outgoing_bridge = CerealOutgoingMessageProxy(body.bridge_services_out, self.enabled, opview=self.opview)
     self.bitrate_controller = LivestreamBitrateController(self.stream.get_receiver_report_stats, self.params, self.enabled)
 
     self.run_task: asyncio.Task | None = None
