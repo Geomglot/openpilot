@@ -708,6 +708,17 @@ def webrtcd_thread(host: str, port: int):
     loop.close()
 
 
+def avoid_keyframe_request_deadlock():
+  # libdatachannel-py does not release the GIL in send(). teleoprtc's PliHandler calls back into
+  # Python (track.request_keyframe) from a libdatachannel worker while it holds the DTLS lock, so a
+  # keyframe request arriving while our loop is inside send() deadlocks webrtcd for good (seen on
+  # weak wifi, where viewers send many requests). The stream encoder already sends a keyframe every
+  # 5 frames, so for opview swap the handler for a plain pass-through that never enters Python.
+  import teleoprtc.stream
+  from libdatachannel import MediaHandler
+  teleoprtc.stream.PliHandler = lambda _request_keyframe: MediaHandler()
+
+
 def main():
   parser = argparse.ArgumentParser(description="WebRTC daemon")
   parser.add_argument("--host", type=str, default=None, help="Host to listen on")
@@ -715,7 +726,10 @@ def main():
   args = parser.parse_args()
 
   # opview connects from another device on the local network
-  host = args.host or ("0.0.0.0" if Params().get_bool("OpviewEnabled") else "127.0.0.1")
+  opview = Params().get_bool("OpviewEnabled")
+  host = args.host or ("0.0.0.0" if opview else "127.0.0.1")
+  if opview:
+    avoid_keyframe_request_deadlock()
   webrtcd_thread(host, args.port)
 
 
