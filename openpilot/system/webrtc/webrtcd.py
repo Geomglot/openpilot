@@ -23,6 +23,7 @@ from openpilot.system.webrtc.schema import generate_field
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.cereal import messaging, log
+from opendbc.car.structs import car
 
 SESSION_TIMEOUT_SECONDS = 300
 
@@ -84,6 +85,7 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
     self.params = Params()
     self._last_sent: dict[str, float] = {}
     self._last_params_sent = 0.
+    self._car: tuple[str, int] | None = None
 
   def add_channel(self, channel):
     self.channels.append(channel)
@@ -109,8 +111,21 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
         continue
       channel.send(encoded_msg)
 
+  def _car_brand_flags(self) -> tuple[str, int]:
+    # carParams is only published every ~50 s, so use the copy the car interface saves at start-up
+    if self._car is None:
+      cp_bytes = self.params.get("CarParamsPersistent")
+      if not cp_bytes:
+        return "", 0
+      cp = messaging.log_from_bytes(cp_bytes, car.CarParams)
+      self._car = (cp.brand, cp.flags)
+    return self._car
+
   def _opview_params(self) -> dict[str, Any]:
+    brand, flags = self._car_brand_flags()
     return {
+      "CarBrand": brand,
+      "CarFlags": flags,
       "IsMetric": self.params.get_bool("IsMetric"),
       "SpeedLimitMode": int(self.params.get("SpeedLimitMode", return_default=True) or 0),
       "RoadNameToggle": self.params.get_bool("RoadNameToggle"),
