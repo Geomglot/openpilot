@@ -153,6 +153,11 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       "SpeedLimitMode": int(self.params.get("SpeedLimitMode", return_default=True) or 0),
       "RoadNameToggle": self.params.get_bool("RoadNameToggle"),
       "RivianForceTorqueSteer": self.params.get_bool("RivianForceTorqueSteer"),
+      "TrueVEgoUI": self.params.get_bool("TrueVEgoUI"),
+      "SPLiveSpeedCorrectionEnabled": self.params.get_bool("SPLiveSpeedCorrectionEnabled"),
+      "SPCruiseSpeedOffset": int(self.params.get("SPCruiseSpeedOffset", return_default=True) or 0),
+      "ShowTurnSignals": self.params.get_bool("ShowTurnSignals"),
+      "BlindSpot": self.params.get_bool("BlindSpot"),
     }
 
   def update(self):
