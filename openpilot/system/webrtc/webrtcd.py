@@ -5,6 +5,7 @@ from collections.abc import Callable
 import os
 import socket
 import time
+import traceback
 import capnp
 import argparse
 import asyncio
@@ -33,6 +34,12 @@ SESSION_TIMEOUT_SECONDS = 300
 OPVIEW_MAX_RATE_HZ = 20.
 OPVIEW_MIN_GAP_S = 0.7 / OPVIEW_MAX_RATE_HZ
 OPVIEW_PARAMS_INTERVAL_S = 1.
+# telemetry still queued in the data channel past this is stale by the time it would arrive: drop new
+# messages instead of queueing behind it (the video is unaffected)
+OPVIEW_MAX_BUFFERED_BYTES = 256 * 1024
+# outgoing data health in the saved logs: a summary this often, failures at most this often
+OPVIEW_STATS_INTERVAL_S = 60.
+OPVIEW_FAILURE_LOG_INTERVAL_S = 1.
 
 
 def _xyz(v) -> dict[str, list[float]]:
@@ -122,6 +129,10 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
     self._capped = {s for s in self.services if s in SERVICE_LIST and SERVICE_LIST[s].frequency > OPVIEW_MAX_RATE_HZ}
     self._last_params_sent = 0.
     self._car: tuple[str, int] | None = None
+    # data health, for the saved logs (swaglog): a frozen opview overlay can then be traced to the comma or not
+    self._stats = {"sent": 0, "queued": 0, "dropped": 0, "closed": 0, "failures": 0, "bytes": 0}
+    self._last_stats_log = time.monotonic()
+    self._last_failure_log = 0.
 
   def add_channel(self, channel):
     self.channels.append(channel)
@@ -144,8 +155,34 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
   def _send(self, encoded_msg: bytes):
     for channel in self.channels:
       if not channel.is_open():
+        self._stats["closed"] += 1
         continue
-      channel.send(encoded_msg)
+      if self.opview and channel.buffered_amount() > OPVIEW_MAX_BUFFERED_BYTES:
+        self._stats["dropped"] += 1
+        continue
+      # libdatachannel: False means queued behind earlier data rather than handed to the network
+      if channel.send(encoded_msg):
+        self._stats["sent"] += 1
+      else:
+        self._stats["queued"] += 1
+      self._stats["bytes"] += len(encoded_msg)
+
+  def _log_stats(self, now: float):
+    if not self.opview or now - self._last_stats_log < OPVIEW_STATS_INTERVAL_S:
+      return
+    buffered = [ch.buffered_amount() for ch in self.channels if ch.is_open()]
+    cloudlog.event("webrtcd.opview.data_stats", **self._stats, buffered=buffered,
+                   seconds=round(now - self._last_stats_log, 1))
+    self._stats = dict.fromkeys(self._stats, 0)
+    self._last_stats_log = now
+
+  def _log_failure(self):
+    self._stats["failures"] += 1
+    now = time.monotonic()
+    if now - self._last_failure_log >= OPVIEW_FAILURE_LOG_INTERVAL_S:
+      self._last_failure_log = now
+      cloudlog.event("webrtcd.opview.send_failure", failures=self._stats["failures"],
+                     exception=traceback.format_exc(limit=4), error=True)
 
   def _car_brand_flags(self) -> tuple[str, int]:
     # carParams is only published every ~50 s, so use the copy the car interface saves at start-up
@@ -209,6 +246,7 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       self._last_params_sent = now
       self._send(json.dumps({"type": "opviewParams", "logMonoTime": time.monotonic_ns(), "valid": True,
                              "data": self._opview_params()}).encode())
+    self._log_stats(now)
 
   async def run(self):
     while True:
@@ -219,6 +257,8 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
         self.update()
       except Exception:
         self.logger.exception("Cereal outgoing proxy failure")
+        if self.opview:
+          self._log_failure()
       await asyncio.sleep(0.01)
 
 
