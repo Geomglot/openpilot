@@ -19,20 +19,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from typing import Any
 
+from openpilot.system.webrtc import opview_slim
 from openpilot.system.webrtc.helpers import StreamRequestBody
 from openpilot.system.webrtc.schema import generate_field
 from openpilot.common.params import Params, UnknownKeyName
 from openpilot.common.swaglog import cloudlog
 from openpilot.cereal import messaging, log
-from openpilot.cereal.services import SERVICE_LIST
 from opendbc.car.structs import car
 
 SESSION_TIMEOUT_SECONDS = 300
 
-# opview redraws at the model rate, so services published faster than this are thinned to about this rate.
-# the gap allows for the send loop's ~25 ms timing; a full 50 ms gap would thin them to ~16/s
-OPVIEW_MAX_RATE_HZ = 20.
-OPVIEW_MIN_GAP_S = 0.7 / OPVIEW_MAX_RATE_HZ
 OPVIEW_PARAMS_INTERVAL_S = 1.
 # data health is counted in Python only: calling channel.buffered_amount() from the send loop crashed
 # webrtcd (route 000000e6). libdatachannel's send() returns False when it queued a message instead of
@@ -125,8 +121,6 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
     self.opview = opview
     self.params = Params()
     self._last_sent: dict[str, float] = {}
-    # services at or below the cap (modelV2 etc.) are never thinned
-    self._capped = {s for s in self.services if s in SERVICE_LIST and SERVICE_LIST[s].frequency > OPVIEW_MAX_RATE_HZ}
     self._last_params_sent = 0.
     self._car: tuple[str, int] | None = None
     # data health, for the saved logs (swaglog): a frozen opview overlay can then be traced to the comma or not
@@ -231,12 +225,14 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
     for service, updated in self.sm.updated.items():
       if not updated:
         continue
-      if self.opview and service in self._capped:
-        if now - self._last_sent.get(service, 0.) < OPVIEW_MIN_GAP_S:
-          continue
-        self._last_sent[service] = now
-      if self.opview and service == "modelV2":
-        msg_dict = opview_model(self.sm[service])
+      if self.opview:
+        # opview: each service at its own rate, cut down to the fields the app reads (opview_slim.py)
+        gap = opview_slim.min_gap_s(service)
+        if gap is not None:
+          if now - self._last_sent.get(service, 0.) < gap:
+            continue
+          self._last_sent[service] = now
+        msg_dict = opview_model(self.sm[service]) if service == "modelV2" else opview_slim.slim(service, self.sm[service])
       else:
         msg_dict = self.to_json(self.sm[service])
       mono_time, valid = self.sm.logMonoTime[service], self.sm.valid[service]
