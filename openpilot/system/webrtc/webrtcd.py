@@ -637,6 +637,15 @@ async def on_shutdown(state: ServerState):
   state.streams.clear()
 
 
+# Web pages may use this server from a browser (CORS), from any site: Gerry's decision (2026-10-10), as the
+# server is only reachable on the car's own network while driving with opview streaming on. Known trade-off: a page
+# from any site opened in a browser on that network can start a stream (camera and telemetry), close the current
+# viewer's session, and name bridge_services_in, which webrtcd publishes into openpilot unchecked.
+# The opview app sends no Origin and is unaffected.
+def cors_origin_allowed(origin: str | None) -> bool:
+  return bool(origin)
+
+
 class WebrtcdHandler(BaseHTTPRequestHandler):
   protocol_version = "HTTP/1.1"
 
@@ -647,9 +656,23 @@ class WebrtcdHandler(BaseHTTPRequestHandler):
     "/notify": ("POST",),
   }
 
+  def _send_cors_headers(self) -> None:
+    origin = self.headers.get("Origin")
+    if not cors_origin_allowed(origin):
+      return
+    self.send_header("Access-Control-Allow-Origin", origin)
+    self.send_header("Vary", "Origin")
+    self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
+    self.send_header("Access-Control-Allow-Headers", "Content-Type")
+    # Chrome's Private/Local Network Access: an HTTPS page reaching this device on the LAN
+    if self.headers.get("Access-Control-Request-Private-Network") == "true":
+      self.send_header("Access-Control-Allow-Private-Network", "true")
+    self.send_header("Access-Control-Max-Age", "600")
+
   def _send(self, status: int, body: bytes, content_type: str) -> None:
     self.send_response(status)
     self.send_header("Content-Type", content_type)
+    self._send_cors_headers()
     self.send_header("Content-Length", str(len(body)))
     self.end_headers()
     if self.command != "HEAD":
@@ -708,7 +731,11 @@ class WebrtcdHandler(BaseHTTPRequestHandler):
     self._dispatch_request()
 
   def do_OPTIONS(self) -> None:
-    self._dispatch_request()
+    # CORS preflight: the browser asks before POSTing JSON to /stream
+    if urlparse(self.path).path in self._routes:
+      self._send(204, b"", "text/plain; charset=utf-8")
+    else:
+      self._dispatch_request()
 
   def log_message(self, format: str, *args: object) -> None:  # noqa: A002  # stdlib override
     # silence default access logging; errors are logged explicitly in _dispatch_request
