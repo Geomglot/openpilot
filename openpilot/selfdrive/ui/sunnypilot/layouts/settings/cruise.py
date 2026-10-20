@@ -181,6 +181,7 @@ class CruiseLayout(Widget):
       description=tr('When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: "Set to speed limit on divided highways", which uses the same activation mechanism.'),
       param="RivianResumeEnabled")
 
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
