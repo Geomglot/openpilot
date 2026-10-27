@@ -16,7 +16,7 @@ import capnp
 
 FLOAT_DIGITS = 3
 
-# a leaf is True; a nested struct (or a list of structs) is a dict of its fields; UNION keeps whichever member of a
+# a leaf is True, or the number of decimal places to round it to when FLOAT_DIGITS is too coarse; a nested struct (or a list of structs) is a dict of its fields; UNION keeps whichever member of a
 # union is set, as {member: fields}, the same shape capnp's to_dict() gives
 UNION = "__union__"
 
@@ -66,6 +66,12 @@ OPVIEW_FIELDS: dict[str, dict] = {
   "liveMapDataSP": {"speedLimitAheadValid": True, "speedLimitAhead": True, "speedLimitAheadDistance": True, "roadName": True},
   "carControl": {"latActive": True, "longActive": True, "actuators": {"accel": True, "steeringAngleDeg": True}},
   "carOutput": {"actuatorsOutput": {"torque": True, "torqueOutputCan": True}},
+  # the lane centering indicator; whole, carControlSP would also carry its list of params
+  "carControlSP": {"laneCentering": {
+    "active": True, "holding": True, "clipped": True, "singleLine": True, "lineSide": True, "offset": True,
+    # a curvature, typically 0.0001 to 0.001 1/m: three places would round it away
+    "correction": 6,
+  }},
   "selfdriveStateSP": {"mads": {"state": True, "enabled": True, "available": True}},
   "onroadEvents": {"name": True, "overrideLongitudinal": True, "overrideLateral": True},
   "driverMonitoringState": _DM,
@@ -77,6 +83,7 @@ OPVIEW_DEFAULT_RATE_HZ = 20.
 OPVIEW_RATES_HZ: dict[str, float] = {
   # moment to moment: speed, alerts, lead box, torque bar
   "carState": 20., "selfdriveState": 20., "controlsState": 20., "radarState": 20., "carOutput": 20.,
+  "carControlSP": 20.,
   # readouts that opview refreshes about 5 times a second
   "carControl": 10., "driverMonitoringState": 10., "selfdriveStateSP": 10., "onroadEvents": 10.,
   "longitudinalPlan": 5., "longitudinalPlanSP": 5.,
@@ -94,27 +101,27 @@ def min_gap_s(service: str) -> float | None:
   return 0.9 / OPVIEW_RATES_HZ.get(service, OPVIEW_DEFAULT_RATE_HZ)
 
 
-def rounded(value: Any) -> Any:
-  """[value] with every float rounded to FLOAT_DIGITS places (non-finite floats as they are)"""
+def rounded(value: Any, digits: int = FLOAT_DIGITS) -> Any:
+  """[value] with every float rounded to [digits] places (non-finite floats as they are)"""
   if isinstance(value, float):
-    return round(value, FLOAT_DIGITS) if math.isfinite(value) else value
+    return round(value, digits) if math.isfinite(value) else value
   if isinstance(value, dict):
-    return {k: rounded(v) for k, v in value.items()}
+    return {k: rounded(v, digits) for k, v in value.items()}
   if isinstance(value, list):
-    return [rounded(v) for v in value]
+    return [rounded(v, digits) for v in value]
   return value
 
 
-def _plain(value: Any) -> Any:
+def _plain(value: Any, digits: int = FLOAT_DIGITS) -> Any:
   # a capnp value as JSON-ready Python, floats rounded
   if isinstance(value, (bool, int, float, str)) or value is None:
-    return rounded(value)
+    return rounded(value, digits)
   if isinstance(value, bytes):
     return value.decode(errors="replace")
   if isinstance(value, capnp._DynamicStructReader):
-    return rounded(value.to_dict())
+    return rounded(value.to_dict(), digits)
   if isinstance(value, capnp._DynamicListReader):
-    return [_plain(v) for v in value]
+    return [_plain(v, digits) for v in value]
   return str(value)  # enums
 
 
@@ -131,7 +138,12 @@ def pick(reader: Any, spec: dict) -> Any:
       value = getattr(reader, key)
     except (AttributeError, capnp.KjException):
       continue  # not in this branch's schema
-    out[key] = _plain(value) if sub is True else pick(value, sub)
+    if sub is True:
+      out[key] = _plain(value)
+    elif isinstance(sub, int):
+      out[key] = _plain(value, sub)
+    else:
+      out[key] = pick(value, sub)
   return out
 
 

@@ -53,6 +53,23 @@ class TestOpviewSlim:
     out = opview_slim.slim("onroadEvents", ev.as_reader().onroadEvents)
     assert out[0]["overrideLongitudinal"] is True
 
+  def test_lane_centering_keeps_a_small_correction(self):
+    def build(cc):
+      lc = cc.laneCentering
+      lc.active = True
+      lc.correction = 0.000123456
+      lc.offset = 0.123456
+      lc.singleLine = True
+      lc.lineSide = -1
+      cc.init("params", 1)[0].key = "SomeParam"  # not read by opview
+    out = opview_slim.slim("carControlSP", _reader("carControlSP", build))
+    lc = out["laneCentering"]
+    assert lc["correction"] == 0.000123
+    assert lc["offset"] == 0.123
+    assert lc["active"] is True and lc["singleLine"] is True and lc["lineSide"] == -1
+    assert "params" not in out
+    json.dumps(out)
+
   def test_unlisted_service_is_sent_whole_with_rounded_floats(self):
     def build(gps):
       gps.latitude = 45.123456789

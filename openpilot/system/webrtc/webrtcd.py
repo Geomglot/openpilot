@@ -216,6 +216,7 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       "SPCruiseSpeedOffset": self._param_int("SPCruiseSpeedOffset"),
       "ShowTurnSignals": self._param_bool("ShowTurnSignals"),
       "BlindSpot": self._param_bool("BlindSpot"),
+      "LaneCenteringEnabled": self._param_bool("LaneCenteringEnabled"),
     }
 
   def update(self):
