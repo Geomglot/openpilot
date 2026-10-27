@@ -41,7 +41,8 @@ OPVIEW_FIELDS: dict[str, dict] = {
     "alertText1": True, "alertText2": True, "alertSize": True, "alertStatus": True,
   },
   "controlsState": {
-    "curvature": True, "desiredCurvature": True, "vCruiseDEPRECATED": True,
+    # curvatures, typically 0.0001 to 0.01 1/m: three places made the angle-steering torque bar move in coarse steps
+    "curvature": 6, "desiredCurvature": 6, "vCruiseDEPRECATED": True,
     "lateralControlState": {UNION: {"saturated": True}},
   },
   "radarState": {"leadOne": _LEAD, "leadTwo": _LEAD},

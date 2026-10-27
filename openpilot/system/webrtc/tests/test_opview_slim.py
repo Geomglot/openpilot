@@ -33,7 +33,8 @@ class TestOpviewSlim:
       cs.lateralControlState.init("torqueState").saturated = True
     out = opview_slim.slim("controlsState", _reader("controlsState", build))
     assert out["lateralControlState"] == {"torqueState": {"saturated": True}}
-    assert out["curvature"] == 0.001
+    # curvature keeps six places: the angle-steering torque bar is drawn from it
+    assert out["curvature"] == 0.001235
 
   def test_leads(self):
     def build(rs):
