@@ -142,6 +142,8 @@ class ExternalController:
     # below must stay on it. If our clamps drift off panda's fixed model, panda rejects the 0x110
     # frame, the EPAS sees a counter gap and faults AngleControlCntr (route c17ea97dc5472650/00000006
     # seg 3).
+    # VM is built from the car's own CarParams, so an R1T gets its 3.45 m from the VIN. VM_safety never sees a VIN
+    # and stays on the 3.08 m the panda uses.
     self.VM = VehicleModel(CP)
     self.VM_safety = VehicleModel(get_safety_CP())
     # without angle hardware this collapses to a plain torque controller: torque_active
