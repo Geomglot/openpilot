@@ -24,7 +24,7 @@ from opendbc.car.rivian.ext_controller import TOI_DROPOUT_FRAMES, TOI_DROPOUT_WA
 from opendbc.car.rivian.ext_controller import (TORQUE_PREARM_ABORT_LOCKOUT, TORQUE_PREARM_EXIT_FRAC, TORQUE_PREARM_MAX_FRAMES,
                                                TORQUE_PREARM_MIN_HOLD)
 from opendbc.car.rivian.interface import CarInterface
-from opendbc.car.rivian.values import CAR, DBC, CarControllerParams, RivianFlags, RivianSafetyFlags
+from opendbc.car.rivian.values import CAR, DBC, CarControllerParams, RivianFlags
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.sunnypilot.car.rivian.mads import MadsCarController
 from opendbc.sunnypilot.car.rivian.carstate_ext import CarStateExt

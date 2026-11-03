@@ -59,7 +59,6 @@ class HudRendererSP(HudRenderer):
     super()._update_state()
     self.road_name_renderer.update()
     lateral_mode.update()
-    self._exp_button.wheel_tint = lateral_mode.wheel_tint
     self.speed_limit_renderer.update()
     self.smart_cruise_control_renderer.update()
     self.turn_signal_controller.update()
