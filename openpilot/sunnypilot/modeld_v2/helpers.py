@@ -19,9 +19,11 @@ import mmap
 import os
 import pickle
 import struct
+import sys
 
 MAGIC = b"SPTGPLN1"
 ALIGNMENT = 256
+MAP_NORESERVE = getattr(mmap, "MAP_NORESERVE", 0x4000 if sys.platform.startswith("linux") else 0)  # not exposed by Python 3.12
 METADATA_TYPES = ("slice", "tuple", "list", "dict", "set", "frozenset", "complex")
 RUNTIME_ENVIRONMENT = ("GMMU", "AMD_AQL", "AMD_DISABLE_SDMA", "GRAPH_ONE_KERNEL")
 
@@ -102,7 +104,10 @@ def write_bundle(path: str, parts: dict, extras: dict | None = None):
 
 def read_parts(path: str) -> tuple[dict, dict]:
   with open(path, "rb") as file:
-    data = memoryview(mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_COPY))
+    # private and writable as ACCESS_COPY (tinygrad's ctypes.from_buffer needs writable memory), but with MAP_NORESERVE: without it the
+    # kernel reserves the whole file against free memory + page cache up front and refuses a big model when that runs short, though
+    # nothing writes to it, so no page is ever copied
+    data = memoryview(mmap.mmap(file.fileno(), 0, flags=mmap.MAP_PRIVATE | MAP_NORESERVE, prot=mmap.PROT_READ | mmap.PROT_WRITE))
   if bytes(data[:len(MAGIC)]) != MAGIC:
     raise ValueError(f"{path} is not a plain tinygrad model, recompile it with compile_modeld.py")
   start = len(MAGIC) + 8 + struct.unpack_from("<Q", data, len(MAGIC))[0]
