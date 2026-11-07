@@ -18,6 +18,7 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.smart_cruise_control import SmartC
 from openpilot.selfdrive.ui.sunnypilot.onroad.turn_signal import TurnSignalController
 from openpilot.selfdrive.ui.sunnypilot.onroad.circular_alerts import CircularAlertsRenderer
 from openpilot.selfdrive.ui.sunnypilot.onroad.speed_renderer import SpeedRenderer
+from openpilot.selfdrive.ui.sunnypilot.onroad.steering_mode_button import SteeringModeButton
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer, UI_CONFIG, FONT_SIZES, COLORS, CRUISE_DISABLED_CHAR
 from openpilot.system.ui.lib.application import gui_app
@@ -40,6 +41,7 @@ class HudRendererSP(HudRenderer):
     self.speed_renderer = SpeedRenderer()
     self.lane_centering_indicator = LaneCenteringIndicator()
     self._torque_bar = TorqueBar(scale=3.0, always=True)
+    self.steering_mode_button = SteeringModeButton()
 
     self.pcm_cruise_speed: bool = True
     self.show_icbm_status: bool = False
@@ -130,6 +132,10 @@ class HudRendererSP(HudRenderer):
       set_speed_color,
     )
 
+  def user_interacting(self) -> bool:
+    # the road view skips its own tap action (the sidebar) while the steering-mode wheel is being pressed
+    return self.steering_mode_button.visible() and self.steering_mode_button.is_pressed
+
   def _draw_current_speed(self, rect: rl.Rectangle) -> None:
     self.speed_renderer.render(rect)
 
@@ -150,3 +156,6 @@ class HudRendererSP(HudRenderer):
     self.turn_signal_controller.render(rect)
     self.circular_alerts_renderer.render(rect)
     self.rocket_fuel.render(rect, ui_state.sm)
+
+    if self.steering_mode_button.visible():
+      self.steering_mode_button.render(self.steering_mode_button.place(rect))
