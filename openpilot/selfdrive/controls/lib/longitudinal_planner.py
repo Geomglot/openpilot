@@ -62,8 +62,9 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.accel_boost = AccelBoost()
     self.acceleration_control = AccelerationControl(CP)
     # Off: the model's acceleration request is left out of the planner, as in the old non-Experimental mode.
-    # plannerd starts with each drive, so a change takes effect from OffRoad to OnRoad.
-    self.model_controls_speed = Params().get_bool("ModelControlsSpeed")
+    # plannerd starts with each drive, so a change takes effect from OffRoad to OnRoad. A key that was never written
+    # (fresh params, simulations, replay) must read as on, the upstream behaviour, so use the registered default.
+    self.model_controls_speed = bool(Params().get("ModelControlsSpeed", return_default=True))
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
