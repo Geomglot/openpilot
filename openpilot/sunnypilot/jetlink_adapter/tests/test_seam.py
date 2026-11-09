@@ -1,6 +1,7 @@
 """
 The fork's side of jetlink: the modeld seams and the no-checkout fallback.
 """
+import re
 from pathlib import Path
 
 from jetlink.openpilot.testing import check_adapter, check_fallback, check_seam
@@ -27,14 +28,18 @@ class TestJetlinkSeam(GuardedTest, OpenpilotTestCase):
                           link_on=jetlink_adapter.link_on) == []
 
   def test_the_model_manager_keeps_its_own_big_model_list(self):
-    """jetlink's model index moves on zoompilot's schedule.
-
-    Its big_catalog() hook would make the index the model manager's big-model
-    list. This fork does not call it, so the list stays the catalog the model
-    manager fetched from sunnypilot; keep it that way unless we choose otherwise.
+    """Its big_catalog() hook would make jetlink's unpinned model index the list
+    the user picks from. Nothing outside the adapter calls the list hooks, so the
+    list stays the catalog the model manager fetched from sunnypilot; keep it that
+    way unless we choose otherwise.
     """
-    fetcher = REPO / "openpilot/sunnypilot/models/fetcher.py"
-    source = fetcher.read_text()
-    assert "big_catalog" not in source, fetcher
-    assert "lists_big_models" not in source, fetcher
-    assert "jetlink_adapter." not in source, fetcher
+    hooks = re.compile(r"\b(?:jetlink_adapter|hooks|HOOKS)\.(?:big_catalog|lists_big_models|listed_ref)\b")
+    adapter = REPO / "openpilot/sunnypilot/jetlink_adapter"
+    callers = [path for path in (REPO / "openpilot").rglob("*.py")
+               if adapter not in path.parents and hooks.search(path.read_text(errors="ignore"))]
+    assert callers == []
+    fetcher = (REPO / "openpilot/sunnypilot/models/fetcher.py").read_text()
+    assert "big_catalog" not in fetcher
+    assert "lists_big_models" not in fetcher
+    assert "listed_ref" not in fetcher
+    assert "jetlink_adapter." not in fetcher

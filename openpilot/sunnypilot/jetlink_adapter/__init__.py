@@ -54,10 +54,12 @@ KEYS = _Keys(link='JetlinkLink', offroad='IsOffroad', progress='JetlinkProgress'
              select='ModelManager_DownloadRef')
 
 # This fork does not call the model manager's lists_big_models() or
-# big_catalog() hooks: the big-model list stays the catalog the model manager
-# fetched itself from sunnypilot, not jetlink's model index, which moves on
-# zoompilot's schedule. The index still names and sizes a pick. The test in
-# tests/test_seam.py keeps the model manager off them.
+# big_catalog() hooks: the list the user picks from stays the catalog the model
+# manager fetched itself from sunnypilot. jetlink itself still reads its model
+# index, which is unpinned and moves on zoompilot's schedule, with the link on:
+# the index gives a pick's ONNX hash, and with nothing picked its default chooses
+# the model. So the index decides which model drives; the bytes are hash-checked
+# against it. tests/test_seam.py keeps the model manager off the hooks.
 
 _AGNOS = os.path.isfile('/AGNOS')
 

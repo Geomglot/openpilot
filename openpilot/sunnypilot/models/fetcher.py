@@ -188,8 +188,8 @@ class ModelFetcher:
     """Fetches fresh model data from remote and updates cache.
     Returns None on transport errors. Raises on 404 and other fatal HTTP errors.
 
-    Deliberately not extended by jetlink: its extra catalog is a live, unpinned
-    third-party URL, so the model manager keeps the catalog it fetched itself
+    Deliberately not replaced by jetlink's model index, which is live, unpinned
+    and third-party, so the model manager keeps the catalog it fetched itself
     (see the jetlink adapter).
     """
     model_url, _ = self.MODEL_SOURCES[source]
