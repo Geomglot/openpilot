@@ -26,16 +26,15 @@ class TestJetlinkSeam(GuardedTest, OpenpilotTestCase):
     assert check_fallback(jetlink_adapter._Off("why"), jetlink_adapter.HOOK_NAMES,
                           link_on=jetlink_adapter.link_on) == []
 
-  def test_the_model_manager_does_not_fetch_the_extra_catalog(self):
-    """jetlink's extra catalog is a live, unpinned third-party URL.
+  def test_the_model_manager_keeps_its_own_big_model_list(self):
+    """jetlink's model index moves on zoompilot's schedule.
 
-    jetlink.registry.catalog.fetch_catalogs() fetches EXTRA_CATALOG_URL from
-    zoompilot/jetlink's moving main branch, and only the extend_catalog() hook
-    reaches it. This fork does not call that hook, so no owner path fetches
-    the extra catalog; keep it that way until that URL is pinned or the fetch
-    is opt-in upstream.
+    Its big_catalog() hook would make the index the model manager's big-model
+    list. This fork does not call it, so the list stays the catalog the model
+    manager fetched from sunnypilot; keep it that way unless we choose otherwise.
     """
     fetcher = REPO / "openpilot/sunnypilot/models/fetcher.py"
     source = fetcher.read_text()
-    assert "extend_catalog" not in source, fetcher
+    assert "big_catalog" not in source, fetcher
+    assert "lists_big_models" not in source, fetcher
     assert "jetlink_adapter." not in source, fetcher
