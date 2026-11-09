@@ -30,6 +30,18 @@ sections:
       label: Relaxed
     enablement:
     - $ref: '#/macros/longitudinal'
+  - key: ModelControlsSpeed
+    widget: toggle
+    title: Model Controls Speed
+    description: >-
+      On (default): the driving model can slow the car below the set speed, as in Experimental
+      Mode. Off: cruise holds the set speed and slows only for a lead car, like the old
+      non-Experimental mode. With it off the car will not slow for stop lights, stop signs or
+      curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it
+      is off. Can only be changed while parked.
+    enablement:
+    - $ref: '#/macros/offroad'
+    - $ref: '#/macros/longitudinal'
   - key: AccelerationControl
     widget: toggle
     title: Acceleration Control

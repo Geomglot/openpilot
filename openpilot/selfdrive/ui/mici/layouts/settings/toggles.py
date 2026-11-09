@@ -22,6 +22,9 @@ class TogglesLayoutMici(NavScroller):
     self._initial_cruise_speed = InitialCruiseSpeedButton()
     self._initial_cruise_speed.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control and not ui_state.CP.pcmCruise)
     self._curve_speed_toggle = BigParamControl("curve speed control", "CurveSpeedControl")
+    self._model_controls_speed_toggle = BigParamControl("model controls speed", "ModelControlsSpeed",
+                                                        description="Off: cruise holds the set speed and slows only for a lead car.\n" +
+                                                                    "It will not slow for stop lights, stop signs or curves.")
     self._acceleration_control_toggle = BigParamControl("acceleration control", "AccelerationControl")
     is_metric_toggle = BigToggle("use metric units", initial_state=ui_state.params.get_bool("IsMetric"), toggle_callback=self._on_metric_toggle)
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled",
@@ -45,6 +48,7 @@ class TogglesLayoutMici(NavScroller):
       self._personality_toggle,
       self._initial_cruise_speed,
       self._curve_speed_toggle,
+      self._model_controls_speed_toggle,
       self._acceleration_control_toggle,
       is_metric_toggle,
       ldw_toggle,
@@ -58,6 +62,7 @@ class TogglesLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("CurveSpeedControl", self._curve_speed_toggle),
+      ("ModelControlsSpeed", self._model_controls_speed_toggle),
       ("AccelerationControl", self._acceleration_control_toggle),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),

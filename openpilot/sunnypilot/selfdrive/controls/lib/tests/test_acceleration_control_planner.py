@@ -70,6 +70,7 @@ def _planner(monkeypatch, raw, cruise, lead, enabled=True):
   planner.mpc = DeterministicMPC(lead)
   planner.accel_boost = AccelBoost()
   planner.acceleration_control = _assist(enabled=enabled)
+  planner.model_controls_speed = True
   # curve control's lateral throttle interlock, inactive
   planner.scc = SimpleNamespace(governor=SimpleNamespace(throttle_scale=lambda: 1.0))
   planner.dt = DT_MDL

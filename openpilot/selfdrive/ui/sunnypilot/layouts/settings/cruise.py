@@ -79,6 +79,12 @@ class CruiseLayout(Widget):
       description=tr('Adds a personality-linked increase to the model acceleration candidate: Relaxed 0.1, Standard 0.2, Aggressive 0.3 m/s^2 at full activation. No increase at raw model requests <= 0; ramps to full at 0.1 m/s^2. Speed activation ramps from zero at 10 mph to full at 20 mph. No increase when the model predicts a stop. The separate gas override is unchanged. Cruise and lead candidates and acceleration limits still constrain the planner. Can only be changed while parked.'),  # noqa: E501
       param="AccelerationControl")
 
+    self.model_controls_speed_toggle = toggle_item_sp(
+      title=tr("Model Controls Speed"),
+      # Keep a literal so the AST translation extractor sees the complete message.
+      description=tr('On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed while parked.'),  # noqa: E501
+      param="ModelControlsSpeed")
+
     self.custom_acc_toggle = toggle_item_sp(
       title=tr("Custom ACC Speed Increments"),
       description="",
@@ -148,6 +154,7 @@ class CruiseLayout(Widget):
       self.scc_v_toggle,
       self.scc_m_toggle,
       self.curve_speed_toggle,
+      self.model_controls_speed_toggle,
       self.acceleration_control_toggle,
       self.custom_acc_toggle,
       self.custom_acc_short_increment,
@@ -212,6 +219,7 @@ class CruiseLayout(Widget):
         # instead of leaving it always-on here.
         self.curve_speed_toggle.action_item.set_enabled(has_long)
         self.following_time_offset.action_item.set_enabled(has_long and ui_state.is_offroad())
+        self.model_controls_speed_toggle.action_item.set_enabled(has_long and ui_state.is_offroad())
         self.acceleration_control_toggle.action_item.set_enabled(has_long and ui_state.is_offroad())
         self.stop_distance_option.action_item.set_enabled(has_long and ui_state.is_offroad())
         self.stop_distance_personality.action_item.set_enabled(has_long and ui_state.is_offroad())
@@ -225,6 +233,7 @@ class CruiseLayout(Widget):
         self.scc_m_toggle.action_item.set_enabled(False)
         self.curve_speed_toggle.action_item.set_enabled(False)
         self.following_time_offset.action_item.set_enabled(False)
+        self.model_controls_speed_toggle.action_item.set_enabled(False)
         self.acceleration_control_toggle.action_item.set_enabled(False)
         self.stop_distance_option.action_item.set_enabled(False)
         self.stop_distance_personality.action_item.set_enabled(False)
@@ -232,6 +241,7 @@ class CruiseLayout(Widget):
       if not has_long:
         ui_state.params.remove("SPFollowingTimeOffset")
         ui_state.params.remove("AccelerationControl")
+        ui_state.params.remove("ModelControlsSpeed")
         ui_state.params.remove("SPStopDistance")
         ui_state.params.remove("SPStopDistancePersonality")
 
@@ -246,6 +256,7 @@ class CruiseLayout(Widget):
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
       self.rivian_resume_toggle.action_item.set_enabled(False)
       self.following_time_offset.action_item.set_enabled(False)
+      self.model_controls_speed_toggle.action_item.set_enabled(False)
       self.acceleration_control_toggle.action_item.set_enabled(False)
       self.stop_distance_option.action_item.set_enabled(False)
       self.stop_distance_personality.action_item.set_enabled(False)

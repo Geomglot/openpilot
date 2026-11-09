@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import math
 import numpy as np
 
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.accel_boost import AccelBoost
@@ -23,9 +25,27 @@ J_CRUISE_BP = [0., 10.0, 25., 40.]
 A_CRUISE_MIN = -0.5
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
+# sunnypilot "Model controls speed" off: the cruise limits of the non-Experimental planner that upstream
+# removed in #39097, restored unchanged.
+A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
+A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
+_A_TOTAL_MAX_V = [1.7, 3.2]
+_A_TOTAL_MAX_BP = [20., 40.]
 
-def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, dt):
-  target_accel = np.clip(v_cruise - v_ego, A_CRUISE_MIN, ACCEL_MAX)
+
+def get_max_accel(v_ego):
+  return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
+
+
+def limit_accel_in_turns(v_ego, angle_steers, CP):
+  # leave room in the total grip budget for the lateral acceleration of the current turn
+  a_total_max = np.interp(v_ego, _A_TOTAL_MAX_BP, _A_TOTAL_MAX_V)
+  a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase)
+  return math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.))
+
+
+def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, dt, max_accel=ACCEL_MAX):
+  target_accel = np.clip(v_cruise - v_ego, A_CRUISE_MIN, max_accel)
   j_cruise = np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS)
   target_accel = float(np.clip(target_accel, a_cruise_prev - j_cruise * dt, a_cruise_prev + j_cruise * dt))
 
@@ -41,6 +61,9 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.dt = dt
     self.accel_boost = AccelBoost()
     self.acceleration_control = AccelerationControl(CP)
+    # Off: the model's acceleration request is left out of the planner, as in the old non-Experimental mode.
+    # plannerd starts with each drive, so a change takes effect from OffRoad to OnRoad.
+    self.model_controls_speed = Params().get_bool("ModelControlsSpeed")
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -108,17 +131,23 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
-    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.dt)
+    if self.model_controls_speed:
+      max_accel = ACCEL_MAX
+    else:
+      steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['vehicleParameters'].angleOffsetDeg
+      max_accel = min(get_max_accel(v_ego), limit_accel_in_turns(v_ego, steer_angle_without_offset, self.CP))
+    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.dt, max_accel)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
-    # Acceleration Control first: Gas Override Boost latches "the model is limiting" from the candidate it is
-    # given, so it has to see the lifted one or it learns a boost from overrides where the lead was the limit.
-    output_a_target_e2e = self.acceleration_control.update(sm, output_a_target_e2e, self.scc.governor.throttle_scale())
-    output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
-
     candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
-                  (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop),
-                  (output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e)]
+                  (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop)]
+
+    if self.model_controls_speed:
+      # Acceleration Control first: Gas Override Boost latches "the model is limiting" from the candidate it is
+      # given, so it has to see the lifted one or it learns a boost from overrides where the lead was the limit.
+      output_a_target_e2e = self.acceleration_control.update(sm, output_a_target_e2e, self.scc.governor.throttle_scale())
+      output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
+      candidates.append((output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e))
 
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
     self.output_should_stop = any(should_stop for _, _, should_stop in candidates)
