@@ -76,6 +76,9 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.model_controls_speed = self._read_model_controls_speed()
     self.model_switch_frame = 0
     self.model_switch_blending = False
+    # what the planner actually sent last frame. The easing works from this, not from a_prev: Smart Cruise Control
+    # and Speed Limit Assist overwrite output_a_target with their own decel before a_prev is taken.
+    self.model_switch_prev_a = init_a
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -180,7 +183,7 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
       if self.model_switch_blending:
         # just switched on: bring the model's braking in gradually. Only the model's request is held back;
         # braking for a lead car is never delayed.
-        eased_e2e = max(output_a_target_e2e, a_prev - MODEL_SWITCH_JERK * self.dt)
+        eased_e2e = max(output_a_target_e2e, self.model_switch_prev_a - MODEL_SWITCH_JERK * self.dt)
         self.model_switch_blending = eased_e2e != output_a_target_e2e
         output_a_target_e2e = eased_e2e
       candidates.append((output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e))
@@ -189,11 +192,12 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     if self.model_switch_blending and not self.model_controls_speed:
       # just switched off: the model's braking went away, so let the acceleration rise gradually. This only ever
       # asks for less acceleration than the plan, never less braking.
-      eased = min(output_a_target, a_prev + MODEL_SWITCH_JERK * self.dt)
+      eased = min(output_a_target, self.model_switch_prev_a + MODEL_SWITCH_JERK * self.dt)
       self.model_switch_blending = eased != output_a_target
       output_a_target = eased
     self.output_should_stop = any(should_stop for _, _, should_stop in candidates)
     self.output_a_target = np.clip(output_a_target, ACCEL_MIN, ACCEL_MAX)
+    self.model_switch_prev_a = float(self.output_a_target)
 
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.output_a_target + a_prev) / 2.0
 

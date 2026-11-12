@@ -8,6 +8,7 @@ and the unrelated sunnypilot controllers are the same seams as in test_accelerat
 import pytest
 
 from openpilot.cereal import log
+from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.longitudinal_planner import (get_max_accel, limit_accel_in_turns, MODEL_SWITCH_JERK,
                                                                    MODEL_SWITCH_MIN_SPEED, MODEL_SWITCH_REFRESH_FRAMES)
@@ -192,3 +193,15 @@ def test_switch_while_not_engaged_applies_at_any_speed_without_easing(monkeypatc
   _run(planner, sm, 1)
   assert not planner.model_controls_speed
   assert not planner.model_switch_blending
+
+
+@pytest.mark.parametrize('on', [True, False])
+def test_easing_ignores_the_curve_controllers_decel(monkeypatch, on):
+  # Smart Cruise Control writes its own decel into output_a_target before the planner takes a_prev. The easing must
+  # still start from what was actually sent, or switching mid-curve would jump to that decel.
+  planner, sm = _setup(monkeypatch, not on, raw=-1.0, cruise=0.5, lead=1.0)
+  before = _switch(planner, sm, on)
+  monkeypatch.setattr(LongitudinalPlannerSP, 'update_targets', lambda self, sm, v_ego, a_ego, v_cruise: (v_cruise, -2.0))
+  _run(planner, sm, 1)
+  direction = -1.0 if on else 1.0
+  assert planner.output_a_target == pytest.approx(before + direction * STEP)
