@@ -12,8 +12,17 @@ from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.sunnypilot.onroad.blind_spot_indicators import BlindSpotIndicators
 from openpilot.selfdrive.ui.sunnypilot.onroad.lane_centering_indicator import LaneCenteringIndicator
 from openpilot.selfdrive.ui.sunnypilot.onroad.lateral_mode import lateral_mode
+from openpilot.selfdrive.ui.sunnypilot.onroad.model_speed_button import ModelSpeedButton, MODEL_OFF_COLOR
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import MousePos
+
+# tap target over the MAX box in the top-left corner (the box is about 162 px wide and ends near 145 px down)
+MAX_TAP_WIDTH = 162
+MAX_TAP_HEIGHT = 150
+# a tap switches Model Controls Speed only once the MAX box has been on screen this long, so a quick
+# double tap on a hidden box (or a tap just after the switch) only shows it
+SWITCH_AFTER_SHOWN_S = 0.5
+MAX_SHOWING_ALPHA = 0.5
 
 
 class HudRendererSP(HudRenderer):
@@ -24,8 +33,12 @@ class HudRendererSP(HudRenderer):
     # comma 4 angle/torque tap toggle on the wheel icon (backend is device-agnostic; this is the trigger)
     self._params = Params()
     self._angle_tap_armed = False
-    self._angle_tap_consumed = False
     self._sp_engaged: bool = False
+    # comma 4 Model Controls Speed switch on the MAX box: first tap shows the box, a second tap switches
+    self.model_speed_button = ModelSpeedButton()
+    self._max_tap_armed = False
+    self._max_was_showing = False
+    self._hud_tap_consumed = False
 
   def _update_state(self) -> None:
     super()._update_state()
@@ -33,6 +46,8 @@ class HudRendererSP(HudRenderer):
     self.lane_centering_indicator.update()
     lateral_mode.update()
     self.wheel_tint = lateral_mode.wheel_tint
+    self.model_speed_button.refresh()
+    self.set_speed_tint = MODEL_OFF_COLOR if self.model_speed_button.visible() and not self.model_speed_button.model_on else None
 
     sp_engaged = ui_state.engaged
     if sp_engaged != self._sp_engaged:
@@ -60,20 +75,46 @@ class HudRendererSP(HudRenderer):
     sm = ui_state.sm
     return sm.recv_frame["carControl"] >= ui_state.started_frame and sm["carControl"].latActive
 
+  def _max_tap_rect(self) -> rl.Rectangle:
+    return rl.Rectangle(self._rect.x, self._rect.y, MAX_TAP_WIDTH, MAX_TAP_HEIGHT)
+
+  def _max_tap_ctx(self) -> bool:
+    # only where the MAX box can be drawn: openpilot speed control, cruise set, engaged and no alert covering it
+    return self.model_speed_button.visible() and self.is_cruise_set and self._engaged and self._can_draw_top_icons
+
+  def _max_showing(self) -> bool:
+    return (self._set_speed_alpha_filter.x > MAX_SHOWING_ALPHA and
+            rl.get_time() - self._set_speed_changed_time >= SWITCH_AFTER_SHOWN_S)
+
   def _handle_mouse_press(self, mouse_pos: MousePos) -> None:
     # arm a wheel tap only if the press lands on the wheel and the toggle is currently allowed
     self._angle_tap_armed = (self._wheel_hit_rect is not None and
                              rl.check_collision_point_rec(mouse_pos, self._wheel_hit_rect) and
                              self._torque_toggle_ctx())
+    # the wheel wins where the two targets touch
+    self._max_tap_armed = (not self._angle_tap_armed and rl.check_collision_point_rec(mouse_pos, self._max_tap_rect()) and
+                           self._max_tap_ctx())
+    # judged at the press, so the switch needs the box to have been on screen when the driver touched it
+    self._max_was_showing = self._max_tap_armed and self._max_showing()
 
   def _handle_mouse_release(self, mouse_pos: MousePos) -> None:
-    # a genuine tap = press + release both on the wheel; flip the request and consume the tap so the
-    # road view does not also navigate to the home screen (checked via angle_tap_consumed()).
+    # a genuine tap = press + release both on the target; act and consume the tap so the road view
+    # does not also navigate to the home screen (checked via hud_tap_consumed()).
     if self._angle_tap_armed and self._wheel_hit_rect is not None and rl.check_collision_point_rec(mouse_pos, self._wheel_hit_rect):
       self._params.put_bool("RivianForceTorqueSteerReq", not self._params.get_bool("RivianForceTorqueSteerReq"))
-      self._angle_tap_consumed = True
+      self._hud_tap_consumed = True
+    elif self._max_tap_armed and rl.check_collision_point_rec(mouse_pos, self._max_tap_rect()):
+      # first tap shows the box; a tap while it is showing switches the model (if fast enough etc).
+      # Either way the box shows for its usual 2.5 s, in the new colour after a switch.
+      if self._max_was_showing:
+        self.model_speed_button.toggle()
+        self.set_speed_tint = MODEL_OFF_COLOR if not self.model_speed_button.model_on else None
+      self._set_speed_changed_time = rl.get_time()
+      self._hud_tap_consumed = True
     self._angle_tap_armed = False
+    self._max_tap_armed = False
+    self._max_was_showing = False
 
-  def angle_tap_consumed(self) -> bool:
-    consumed, self._angle_tap_consumed = self._angle_tap_consumed, False
+  def hud_tap_consumed(self) -> bool:
+    consumed, self._hud_tap_consumed = self._hud_tap_consumed, False
     return consumed

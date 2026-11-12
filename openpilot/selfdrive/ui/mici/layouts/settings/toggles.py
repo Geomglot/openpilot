@@ -24,7 +24,9 @@ class TogglesLayoutMici(NavScroller):
     self._curve_speed_toggle = BigParamControl("curve speed control", "CurveSpeedControl")
     self._model_controls_speed_toggle = BigParamControl("model controls speed", "ModelControlsSpeed",
                                                         description="Off: cruise holds the set speed and slows only for a lead car.\n" +
-                                                                    "It will not slow for stop lights, stop signs or curves.")
+                                                                    "It will not slow for stop lights, stop signs or curves.\n" +
+                                                                    "Above 20 mph (30 km/h), tap MAX to show it, then again to switch.\n" +
+                                                                    "The set speed is light blue while it is off.")
     self._acceleration_control_toggle = BigParamControl("acceleration control", "AccelerationControl")
     is_metric_toggle = BigToggle("use metric units", initial_state=ui_state.params.get_bool("IsMetric"), toggle_callback=self._on_metric_toggle)
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled",

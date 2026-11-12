@@ -39,7 +39,8 @@ sections:
       non-Experimental mode. With it off the car will not slow for stop lights, stop signs or
       curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it
       is off. Can only be changed here while parked. While driving above 20 mph/30 km/h, tap the
-      MAX box on the screen to switch it; the set speed shows light blue while it is off.
+      MAX box on the screen to switch it (on a comma 4, tap once to show the box, then again);
+      the set speed shows light blue while it is off.
     enablement:
     - $ref: '#/macros/offroad'
     - $ref: '#/macros/longitudinal'

@@ -130,6 +130,7 @@ class HudRenderer(Widget):
     self._wheel_alpha_filter = FirstOrderFilter(0, 0.05, 1 / gui_app.target_fps)
     self._wheel_y_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
     self.wheel_tint: rl.Color | None = None  # optional RGB tint for the non-critical wheel
+    self.set_speed_tint: rl.Color | None = None  # optional RGB tint for the set speed number
     self._wheel_hit_rect: rl.Rectangle | None = None  # padded tap target, set while drawing the wheel
 
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
@@ -139,9 +140,9 @@ class HudRenderer(Widget):
     """Set the wheel icon to critical or normal state."""
     self._show_wheel_critical = critical
 
-  def angle_tap_consumed(self) -> bool:
-    # Generic hook: did a wheel tap get consumed this frame (so the road view should not also
-    # navigate home)? Base has no tap handling; the sunnypilot mici hud overrides this.
+  def hud_tap_consumed(self) -> bool:
+    # Generic hook: did a tap on a HUD element (wheel or MAX box) get consumed this frame, so the
+    # road view should not also navigate home? Base has no tap handling; the sunnypilot mici hud overrides this.
     return False
 
   def set_can_draw_top_icons(self, can_draw_top_icons: bool):
@@ -287,7 +288,8 @@ class HudRenderer(Widget):
     rl.draw_circle_gradient(rl.Vector2(x + circle_radius, y + circle_radius), circle_radius,
                             rl.Color(0, 0, 0, int(255 / 2 * alpha)), rl.BLANK)
 
-    set_speed_color = rl.Color(255, 255, 255, int(255 * 0.9 * alpha))
+    tint = self.set_speed_tint if self.set_speed_tint is not None else rl.WHITE
+    set_speed_color = rl.Color(tint.r, tint.g, tint.b, int(255 * 0.9 * alpha))
     max_color = rl.Color(255, 255, 255, int(255 * 0.9 * alpha))
 
     set_speed = self.set_speed

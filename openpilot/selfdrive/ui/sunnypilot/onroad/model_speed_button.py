@@ -56,19 +56,28 @@ class ModelSpeedButton(Widget):
   def tap_allowed(self) -> bool:
     return self.visible() and self.fast_enough()
 
-  def _update_state(self) -> None:
+  def refresh(self) -> None:
     # pick up a change made in the settings while parked, or on another drive
     now = time.monotonic()
     if now - self._last_read >= PARAM_REFRESH_S:
       self._last_read = now
       self.model_on = self._read()
 
+  def toggle(self) -> bool:
+    """Switch the setting if a tap is allowed right now. Returns whether it switched."""
+    if not self.tap_allowed():
+      return False
+    self.model_on = not self.model_on
+    self._params.put_bool("ModelControlsSpeed", self.model_on)
+    self._last_read = time.monotonic()
+    return True
+
+  def _update_state(self) -> None:
+    self.refresh()
+
   def _handle_mouse_release(self, mouse_pos) -> None:
     super()._handle_mouse_release(mouse_pos)
-    if self.tap_allowed():
-      self.model_on = not self.model_on
-      self._params.put_bool("ModelControlsSpeed", self.model_on)
-      self._last_read = time.monotonic()
+    self.toggle()
 
   def _render(self, rect: rl.Rectangle) -> None:
     pass
