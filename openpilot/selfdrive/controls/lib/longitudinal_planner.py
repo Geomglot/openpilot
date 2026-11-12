@@ -33,6 +33,14 @@ _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
+# "Model controls speed" can be switched while driving (a tap on the MAX box). The planner picks it up within half
+# a second, never below MODEL_SWITCH_MIN_SPEED while openpilot is controlling the speed (switching off at a red light
+# with no lead would set off towards the set speed), and eases the change in at MODEL_SWITCH_JERK instead of jumping.
+MODEL_SWITCH_REFRESH_FRAMES = 10  # 0.5 s at the 20 Hz planner rate
+MODEL_SWITCH_MIN_SPEED = 5.0  # m/s, about 11 mph; the on-screen tap needs 20 mph / 30 km/h, this is the backstop
+MODEL_SWITCH_JERK = 1.0  # m/s^3
+
+
 def get_max_accel(v_ego):
   return np.interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
@@ -62,9 +70,12 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.accel_boost = AccelBoost()
     self.acceleration_control = AccelerationControl(CP)
     # Off: the model's acceleration request is left out of the planner, as in the old non-Experimental mode.
-    # plannerd starts with each drive, so a change takes effect from OffRoad to OnRoad. A key that was never written
-    # (fresh params, simulations, replay) must read as on, the upstream behaviour, so use the registered default.
-    self.model_controls_speed = bool(Params().get("ModelControlsSpeed", return_default=True))
+    # A key that was never written (fresh params, simulations, replay) must read as on, the upstream behaviour,
+    # so use the registered default.
+    self.params = Params()
+    self.model_controls_speed = self._read_model_controls_speed()
+    self.model_switch_frame = 0
+    self.model_switch_blending = False
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -74,6 +85,21 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
+
+  def _read_model_controls_speed(self) -> bool:
+    return bool(self.params.get("ModelControlsSpeed", return_default=True))
+
+  def _update_model_controls_speed(self, v_ego: float, reset_state: bool) -> None:
+    if self.model_switch_frame % MODEL_SWITCH_REFRESH_FRAMES == 0:
+      wanted = self._read_model_controls_speed()
+      if wanted != self.model_controls_speed and (reset_state or v_ego >= MODEL_SWITCH_MIN_SPEED):
+        self.model_controls_speed = wanted
+        # ease in only while openpilot is controlling the speed; otherwise the state reset below covers it
+        self.model_switch_blending = not reset_state
+        if wanted:
+          # the gas-override boost stopped learning while the model was out; start it again from zero
+          self.accel_boost = AccelBoost()
+    self.model_switch_frame += 1
 
   def update(self, sm):
     LongitudinalPlannerSP.update(self, sm)
@@ -92,7 +118,10 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
     reset_state = reset_state or not v_cruise_initialized
 
+    self._update_model_controls_speed(v_ego, reset_state)
+
     if reset_state:
+      self.model_switch_blending = False
       self.v_desired_filter.x = v_ego
       self.output_a_target = np.clip(sm['carState'].aEgo, ACCEL_MIN, ACCEL_MAX)
       self.a_cruise = self.output_a_target
@@ -148,9 +177,21 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
       # given, so it has to see the lifted one or it learns a boost from overrides where the lead was the limit.
       output_a_target_e2e = self.acceleration_control.update(sm, output_a_target_e2e, self.scc.governor.throttle_scale())
       output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
+      if self.model_switch_blending:
+        # just switched on: bring the model's braking in gradually. Only the model's request is held back;
+        # braking for a lead car is never delayed.
+        eased_e2e = max(output_a_target_e2e, a_prev - MODEL_SWITCH_JERK * self.dt)
+        self.model_switch_blending = eased_e2e != output_a_target_e2e
+        output_a_target_e2e = eased_e2e
       candidates.append((output_a_target_e2e, LongitudinalPlanSource.e2e, output_should_stop_e2e))
 
     output_a_target, self.mpc.source, _ = min(candidates, key=lambda c: c[0])
+    if self.model_switch_blending and not self.model_controls_speed:
+      # just switched off: the model's braking went away, so let the acceleration rise gradually. This only ever
+      # asks for less acceleration than the plan, never less braking.
+      eased = min(output_a_target, a_prev + MODEL_SWITCH_JERK * self.dt)
+      self.model_switch_blending = eased != output_a_target
+      output_a_target = eased
     self.output_should_stop = any(should_stop for _, _, should_stop in candidates)
     self.output_a_target = np.clip(output_a_target, ACCEL_MIN, ACCEL_MAX)
 

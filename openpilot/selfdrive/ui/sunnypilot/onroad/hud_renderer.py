@@ -19,6 +19,7 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.turn_signal import TurnSignalContr
 from openpilot.selfdrive.ui.sunnypilot.onroad.circular_alerts import CircularAlertsRenderer
 from openpilot.selfdrive.ui.sunnypilot.onroad.speed_renderer import SpeedRenderer
 from openpilot.selfdrive.ui.sunnypilot.onroad.steering_mode_button import SteeringModeButton
+from openpilot.selfdrive.ui.sunnypilot.onroad.model_speed_button import ModelSpeedButton, MODEL_OFF_COLOR, MODEL_OFF_DIM_COLOR
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer, UI_CONFIG, FONT_SIZES, COLORS, CRUISE_DISABLED_CHAR
 from openpilot.system.ui.lib.application import gui_app
@@ -42,6 +43,8 @@ class HudRendererSP(HudRenderer):
     self.lane_centering_indicator = LaneCenteringIndicator()
     self._torque_bar = TorqueBar(scale=3.0, always=True)
     self.steering_mode_button = SteeringModeButton()
+    self.model_speed_button = ModelSpeedButton()
+    self._set_speed_rect: rl.Rectangle | None = None
 
     self.pcm_cruise_speed: bool = True
     self.show_icbm_status: bool = False
@@ -89,6 +92,7 @@ class HudRendererSP(HudRenderer):
     y = rect.y + 45
 
     set_speed_rect = rl.Rectangle(x, y, set_speed_width, UI_CONFIG.set_speed_height)
+    self._set_speed_rect = set_speed_rect
     rl.draw_rectangle_rounded(set_speed_rect, 0.35, 10, COLORS.BLACK_TRANSLUCENT)
     rl.draw_rectangle_rounded_lines_ex(set_speed_rect, 0.35, 10, 6, COLORS.BORDER_TRANSLUCENT)
 
@@ -106,6 +110,10 @@ class HudRendererSP(HudRenderer):
           max_color = COLORS.DISENGAGED
         elif ui_state.status == UIStatus.OVERRIDE:
           max_color = COLORS.OVERRIDE
+
+    # "Model Controls Speed" off: light blue set speed, over the Speed Limit Assist green (MAX keeps that)
+    if self.model_speed_button.visible() and not self.model_speed_button.model_on:
+      set_speed_color = MODEL_OFF_COLOR if self.is_cruise_set else MODEL_OFF_DIM_COLOR
 
     max_str_size = 60 if self.show_icbm_status else 40
     max_str_y = 15 if self.show_icbm_status else 27
@@ -133,14 +141,20 @@ class HudRendererSP(HudRenderer):
     )
 
   def user_interacting(self) -> bool:
-    # the road view skips its own tap action (the sidebar) while the steering-mode wheel is being pressed
-    return self.steering_mode_button.visible() and self.steering_mode_button.is_pressed
+    # the road view skips its own tap action (the sidebar) while the steering-mode wheel or the MAX box is pressed
+    return ((self.steering_mode_button.visible() and self.steering_mode_button.is_pressed) or
+            (self.model_speed_button.visible() and self.model_speed_button.is_pressed))
 
   def _draw_current_speed(self, rect: rl.Rectangle) -> None:
     self.speed_renderer.render(rect)
 
   def _render(self, rect: rl.Rectangle) -> None:
+    self._set_speed_rect = None
     super()._render(rect)
+
+    # the MAX box doubles as the "Model Controls Speed" switch while it is on screen
+    if self._set_speed_rect is not None and self.model_speed_button.visible():
+      self.model_speed_button.render(self._set_speed_rect)
 
     if ui_state.torque_bar:
       torque_rect = rect

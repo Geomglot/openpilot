@@ -82,7 +82,8 @@ class CruiseLayout(Widget):
     self.model_controls_speed_toggle = toggle_item_sp(
       title=tr("Model Controls Speed"),
       # Keep a literal so the AST translation extractor sees the complete message.
-      description=tr('On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed while parked.'),  # noqa: E501
+      # A callable, re-read each frame, so the tap speed follows the metric setting.
+      description=lambda: tr('On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed here while parked. While driving above {speed}, tap the MAX box to switch it; the set speed shows light blue while it is off.').format(speed="30 km/h" if ui_state.is_metric else "20 mph"),  # noqa: E501
       param="ModelControlsSpeed")
 
     self.custom_acc_toggle = toggle_item_sp(
@@ -178,6 +179,8 @@ class CruiseLayout(Widget):
     self._scroller.show_event()
     self.icbm_toggle.show_description(True)
     self.custom_acc_toggle.show_description(True)
+    # the MAX box tap can change this while driving, after the toggle last read it
+    self.model_controls_speed_toggle.action_item.set_state(bool(ui_state.params.get("ModelControlsSpeed", return_default=True)))
 
   def _set_current_panel(self, panel: PanelType):
     self._current_panel = panel

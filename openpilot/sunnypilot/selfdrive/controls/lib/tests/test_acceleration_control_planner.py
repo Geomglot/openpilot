@@ -60,6 +60,16 @@ class Publisher:
       self.messages[service] = decoded.to_dict()[service]
 
 
+class SettingParams:
+  """Params as the planner reads it each half second: only the "Model Controls Speed" key, on by default."""
+  def __init__(self, model_controls_speed=True):
+    self.model_controls_speed = model_controls_speed
+
+  def get(self, key, return_default=False):
+    assert key == "ModelControlsSpeed"
+    return self.model_controls_speed
+
+
 def _planner(monkeypatch, raw, cruise, lead, enabled=True):
   # Isolate unrelated controllers without replacing update's selection algorithms.
   monkeypatch.setattr(LongitudinalPlannerSP, 'update', lambda self, sm: None)
@@ -70,7 +80,10 @@ def _planner(monkeypatch, raw, cruise, lead, enabled=True):
   planner.mpc = DeterministicMPC(lead)
   planner.accel_boost = AccelBoost()
   planner.acceleration_control = _assist(enabled=enabled)
+  planner.params = SettingParams()
   planner.model_controls_speed = True
+  planner.model_switch_frame = 0
+  planner.model_switch_blending = False
   # curve control's lateral throttle interlock, inactive
   planner.scc = SimpleNamespace(governor=SimpleNamespace(throttle_scale=lambda: 1.0))
   planner.dt = DT_MDL
