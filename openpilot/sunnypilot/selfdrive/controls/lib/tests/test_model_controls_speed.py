@@ -8,9 +8,10 @@ and the unrelated sunnypilot controllers are the same seams as in test_accelerat
 import pytest
 
 from openpilot.cereal import log
-from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP
+from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP, LongitudinalPlanSource as TargetSource
 from openpilot.common.realtime import DT_MDL
-from openpilot.selfdrive.controls.lib.longitudinal_planner import (get_max_accel, limit_accel_in_turns, MODEL_SWITCH_JERK,
+from openpilot.selfdrive.controls.lib.longitudinal_planner import (get_max_accel, limit_accel_in_turns, A_CRUISE_MIN,
+                                                                   A_CRUISE_MIN_SPEED_CAP, MODEL_SWITCH_JERK,
                                                                    MODEL_SWITCH_MIN_SPEED, MODEL_SWITCH_REFRESH_FRAMES)
 from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control_planner import Source, _planner
 
@@ -205,3 +206,47 @@ def test_easing_ignores_the_curve_controllers_decel(monkeypatch, on):
   _run(planner, sm, 1)
   direction = -1.0 if on else 1.0
   assert planner.output_a_target == pytest.approx(before + direction * STEP)
+
+
+def _speed_cap(monkeypatch, planner, source, v_target):
+  # what update_targets does when a speed-cap controller wins: it lowers v_cruise and names itself the source
+  def update_targets(self, sm, v_ego, a_ego, v_cruise):
+    self.source = source
+    return v_target, a_ego
+  monkeypatch.setattr(LongitudinalPlannerSP, 'update_targets', update_targets)
+
+
+@pytest.mark.parametrize('source', [TargetSource.curveSpeed, TargetSource.sccMap, TargetSource.sccVision,
+                                    TargetSource.speedLimitAssist])
+def test_off_lets_curve_and_speed_controllers_slow_as_planned(monkeypatch, source):
+  planner, sm = _setup(monkeypatch, False, raw=3.0, cruise=0.0, lead=3.0)
+  _speed_cap(monkeypatch, planner, source, V_EGO - 5.0)
+  accels = [a for a, _ in _run(planner, sm, 60)]
+  assert min(accels) == pytest.approx(A_CRUISE_MIN_SPEED_CAP)
+  assert all(b - a >= -0.8 * DT_MDL - 1e-9 for a, b in zip(accels, accels[1:], strict=False))  # still jerk-limited
+
+
+def test_off_keeps_a_lower_set_speed_gentle(monkeypatch):
+  planner, sm = _setup(monkeypatch, False, raw=3.0, cruise=0.0, lead=3.0)
+  _speed_cap(monkeypatch, planner, TargetSource.cruise, V_EGO - 5.0)
+  accels = [a for a, _ in _run(planner, sm, 60)]
+  assert min(accels) == pytest.approx(A_CRUISE_MIN)
+
+
+def test_on_is_unchanged_for_curve_and_speed_controllers(monkeypatch):
+  # with the model in, the cruise ramp keeps upstream's limit; the model does the harder slowing
+  planner, sm = _setup(monkeypatch, True, raw=3.0, cruise=0.0, lead=3.0)
+  _speed_cap(monkeypatch, planner, TargetSource.sccMap, V_EGO - 5.0)
+  _run(planner, sm, 60)
+  assert planner.a_cruise == pytest.approx(A_CRUISE_MIN)
+
+
+def test_back_to_the_gentle_limit_is_eased(monkeypatch):
+  # the curve controller lets go while the cruise ramp is braking at 1.2: the ramp eases back, it does not jump
+  planner, sm = _setup(monkeypatch, False, raw=3.0, cruise=0.0, lead=3.0)
+  _speed_cap(monkeypatch, planner, TargetSource.curveSpeed, V_EGO - 5.0)
+  _run(planner, sm, 60)
+  _speed_cap(monkeypatch, planner, TargetSource.cruise, V_EGO - 5.0)
+  accels = [A_CRUISE_MIN_SPEED_CAP] + [a for a, _ in _run(planner, sm, 30)]
+  assert max(b - a for a, b in zip(accels, accels[1:], strict=False)) <= 0.8 * DT_MDL + 1e-9
+  assert accels[-1] == pytest.approx(A_CRUISE_MIN)

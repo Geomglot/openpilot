@@ -85,6 +85,7 @@ def _planner(monkeypatch, raw, cruise, lead, enabled=True):
   planner.model_switch_frame = 0
   planner.model_switch_blending = False
   planner.model_switch_prev_a = 0.0
+  planner.source = custom.LongitudinalPlanSP.LongitudinalPlanSource.cruise  # update_targets is a seam
   # curve control's lateral throttle interlock, inactive
   planner.scc = SimpleNamespace(governor=SimpleNamespace(throttle_scale=lambda: 1.0))
   planner.dt = DT_MDL

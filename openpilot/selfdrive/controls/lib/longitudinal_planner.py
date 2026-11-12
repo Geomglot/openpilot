@@ -17,7 +17,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 
-from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP
+from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP, LongitudinalPlanSource as TargetSource
 from openpilot.sunnypilot.selfdrive.controls.lib.acceleration_control import AccelerationControl
 
 J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -31,6 +31,10 @@ A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
+# With the model out, cruise is the only way Curve Speed Control, Smart Cruise Control (map and vision) and Speed Limit
+# Assist can slow the car, and they plan for more than A_CRUISE_MIN (map 1.2, vision 1.0, curve 1.8 m/s^2). While one
+# of them sets the target, allow the pre-#39060 limit. A lower set speed on the stalk keeps the gentle A_CRUISE_MIN.
+A_CRUISE_MIN_SPEED_CAP = -1.2
 
 
 # "Model controls speed" can be switched while driving (a tap on the MAX box). The planner picks it up within half
@@ -52,8 +56,8 @@ def limit_accel_in_turns(v_ego, angle_steers, CP):
   return math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.))
 
 
-def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, dt, max_accel=ACCEL_MAX):
-  target_accel = np.clip(v_cruise - v_ego, A_CRUISE_MIN, max_accel)
+def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, dt, max_accel=ACCEL_MAX, min_accel=A_CRUISE_MIN):
+  target_accel = np.clip(v_cruise - v_ego, min_accel, max_accel)
   j_cruise = np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS)
   target_accel = float(np.clip(target_accel, a_cruise_prev - j_cruise * dt, a_cruise_prev + j_cruise * dt))
 
@@ -164,12 +168,15 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
+    min_accel = A_CRUISE_MIN
     if self.model_controls_speed:
       max_accel = ACCEL_MAX
     else:
       steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['vehicleParameters'].angleOffsetDeg
       max_accel = min(get_max_accel(v_ego), limit_accel_in_turns(v_ego, steer_angle_without_offset, self.CP))
-    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.dt, max_accel)
+      if self.source != TargetSource.cruise:
+        min_accel = A_CRUISE_MIN_SPEED_CAP
+    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.dt, max_accel, min_accel)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
     candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
