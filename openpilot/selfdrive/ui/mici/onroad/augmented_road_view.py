@@ -257,6 +257,8 @@ class AugmentedRoadView(CameraView):
     self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
     self._driver_state_renderer.render()
     self._long_indicator.set_should_draw(not self._hud_renderer.drawing_top_icons())
+    # the distance bars carry the set speed colour, so a mode shown on MAX stays visible while MAX is hidden
+    self._long_indicator.set_bar_tint(self._hud_renderer.set_speed_tint)
     self._long_indicator.render(self._content_rect)
 
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)

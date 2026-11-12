@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pyray as rl
 from openpilot.cereal import log
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -23,6 +25,7 @@ class LongIndicator(Widget):
     self._personality: int | None = None
     self._personality_changed_time = -HIGHLIGHT_TIME
     self._should_draw = False
+    self._bar_tint: rl.Color | None = None  # optional RGB tint for the white distance bars
 
   @staticmethod
   def _texture(name: str, width: int, height: int) -> rl.Texture:
@@ -30,6 +33,9 @@ class LongIndicator(Widget):
 
   def set_should_draw(self, should_draw: bool):
     self._should_draw = should_draw
+
+  def set_bar_tint(self, tint: rl.Color | None):
+    self._bar_tint = tint
 
   def _render(self, rect: rl.Rectangle) -> None:
     sm = ui_state.sm
@@ -80,10 +86,12 @@ class LongIndicator(Widget):
       active = active_f.update(float(i < count))
       green_alpha = green_f.update(float(highlight and i == count - 1))
       # only lit bars blink on override
-      self._draw_centered(white, rect, y, (0.35 * (1 - active) + 0.9 * (active - green_alpha) * blink) * alpha)
+      self._draw_centered(white, rect, y, (0.35 * (1 - active) + 0.9 * (active - green_alpha) * blink) * alpha, self._bar_tint)
       self._draw_centered(green, rect, y, green_alpha * blink * alpha)
 
   @staticmethod
-  def _draw_centered(texture: rl.Texture, rect: rl.Rectangle, y: float, alpha: float) -> None:
+  def _draw_centered(texture: rl.Texture, rect: rl.Rectangle, y: float, alpha: float, tint: rl.Color | None = None) -> None:
     pos = rl.Vector2(rect.x + 46 - texture.width / 2, rect.y + y - texture.height / 2)
-    rl.draw_texture_ex(texture, pos, 0.0, 1.0, rl.Color(255, 255, 255, round(255 * alpha)))
+    # rl.WHITE is a plain tuple, not a Color, so the default is spelled out
+    r, g, b = (tint.r, tint.g, tint.b) if tint is not None else (255, 255, 255)
+    rl.draw_texture_ex(texture, pos, 0.0, 1.0, rl.Color(r, g, b, round(255 * alpha)))

@@ -288,8 +288,9 @@ class HudRenderer(Widget):
     rl.draw_circle_gradient(rl.Vector2(x + circle_radius, y + circle_radius), circle_radius,
                             rl.Color(0, 0, 0, int(255 / 2 * alpha)), rl.BLANK)
 
-    tint = self.set_speed_tint if self.set_speed_tint is not None else rl.WHITE
-    set_speed_color = rl.Color(tint.r, tint.g, tint.b, int(255 * 0.9 * alpha))
+    # rl.WHITE is a plain tuple, not a Color, so the default is spelled out
+    r, g, b = (self.set_speed_tint.r, self.set_speed_tint.g, self.set_speed_tint.b) if self.set_speed_tint is not None else (255, 255, 255)
+    set_speed_color = rl.Color(r, g, b, int(255 * 0.9 * alpha))
     max_color = rl.Color(255, 255, 255, int(255 * 0.9 * alpha))
 
     set_speed = self.set_speed

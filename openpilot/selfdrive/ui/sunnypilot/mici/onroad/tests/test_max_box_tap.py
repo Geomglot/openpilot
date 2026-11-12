@@ -3,6 +3,8 @@
 The HUD is built without a window, so nothing is drawn. The clock is a stand-in for rl.get_time, the box's fade is
 set directly on its filter, and Params is a dict with the same get/put_bool calls.
 """
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("pyray")
@@ -200,3 +202,53 @@ def test_wheel_wins_where_the_targets_touch(clock, drive, monkeypatch):
   assert _model_on(hud)
   assert hud._params.values["RivianForceTorqueSteerReq"] is True
   assert hud.hud_tap_consumed()
+
+
+
+class BarsSubMaster:
+  def __init__(self):
+    msg = messaging.new_message('selfdriveState')
+    msg.selfdriveState.personality = 'standard'
+    self._ss = msg.as_reader().selfdriveState
+    self._events = messaging.new_message('onroadEvents', 0).as_reader().onroadEvents
+
+  def __getitem__(self, s):
+    return {"selfdriveState": self._ss, "onroadEvents": self._events}[s]
+
+
+@pytest.mark.parametrize("tint", [None, MODEL_OFF_COLOR])
+def test_distance_bars_carry_the_set_speed_colour(clock, monkeypatch, tint):
+  from openpilot.selfdrive.ui.mici.onroad import long_indicator as li_mod
+  drawn = []
+  monkeypatch.setattr(li_mod.rl, "draw_texture_ex", lambda tex, pos, rot, scale, color: drawn.append((tex.kind, (color.r, color.g, color.b))))
+  monkeypatch.setattr(ui_state, "sm", BarsSubMaster())
+
+  ind = li_mod.LongIndicator.__new__(li_mod.LongIndicator)
+  ind._txt_distance = [(SimpleNamespace(kind="white", width=40, height=9), SimpleNamespace(kind="green", width=60, height=35)) for _ in range(3)]
+  ind._distance_filters = [(FirstOrderFilter(1.0, 0.1, 0.05), FirstOrderFilter(0.0, 0.1, 0.05)) for _ in range(3)]
+  ind._personality = 1
+  ind._personality_changed_time = -10.0
+  ind.set_bar_tint(tint)
+  ind._draw_distance_bars(rl.Rectangle(0, 0, 536, 240), 1.0, True)
+
+  want = (255, 255, 255) if tint is None else (tint.r, tint.g, tint.b)
+  assert [rgb for kind, rgb in drawn if kind == "white"] == [want] * 3
+  # the green personality highlight keeps its own colour
+  assert all(rgb == (255, 255, 255) for kind, rgb in drawn if kind == "green")
+
+
+@pytest.mark.parametrize("model_on", [True, False])
+def test_max_box_draws_in_the_right_colour(clock, drive, monkeypatch, model_on):
+  # draws for real down to the raylib calls, which are captured, so a bad colour value fails here
+  texts = []
+  monkeypatch.setattr(hud_mod.rl, "draw_circle_gradient", lambda *a: None)
+  monkeypatch.setattr(hud_mod.rl, "draw_text_ex", lambda font, text, pos, size, spacing, color: texts.append((text, (color.r, color.g, color.b))))
+  monkeypatch.setattr(ui_state, "is_metric", False)
+  hud = _hud(model_on=model_on, showing_for=1.0)
+  hud.set_speed = 64.0
+  hud._font_display = hud._font_semi_bold = None
+  hud._draw_set_speed(rl.Rectangle(0, 0, 536, 240))
+
+  number = (MODEL_OFF_COLOR.r, MODEL_OFF_COLOR.g, MODEL_OFF_COLOR.b) if not model_on else (255, 255, 255)
+  assert texts[0] == ("40", number)
+  assert texts[1][1] == (255, 255, 255)  # MAX keeps its colour

@@ -897,7 +897,7 @@
               "key": "ModelControlsSpeed",
               "widget": "toggle",
               "title": "Model Controls Speed",
-              "description": "On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed here while parked. While driving above 20 mph/30 km/h, tap the MAX box on the screen to switch it (on a comma 4, tap once to show the box, then again); the set speed shows light blue while it is off.",
+              "description": "On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed here while parked. While driving above 20 mph/30 km/h, tap the MAX box on the screen to switch it (on a comma 4, tap once to show the box, then again); the set speed (and on a comma 4 the distance bars) shows light blue while it is off.",
               "enablement": [
                 {
                   "type": "offroad_only"
