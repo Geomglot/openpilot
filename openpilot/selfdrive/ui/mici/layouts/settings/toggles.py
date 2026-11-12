@@ -109,10 +109,11 @@ class TogglesLayoutMici(NavScroller):
     # refresh loop below mirrors the param back into the widget when it's shown again.
     if ui_state.CP is not None:
       long_avail = ui_state.has_longitudinal_control
-      for w in (self._personality_toggle, self._curve_speed_toggle, self._acceleration_control_toggle):
+      for w in (self._personality_toggle, self._curve_speed_toggle, self._model_controls_speed_toggle, self._acceleration_control_toggle):
         w.set_visible(long_avail)
-      # like the sunnylink setting, Acceleration Control only changes while parked
-      self._acceleration_control_toggle.set_enabled(lambda: ui_state.is_offroad())
+      # like the sunnylink settings, these only change while parked
+      for w in (self._model_controls_speed_toggle, self._acceleration_control_toggle):
+        w.set_enabled(lambda: ui_state.is_offroad())
 
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
