@@ -104,8 +104,10 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
         # ease in only while openpilot is controlling the speed; otherwise the state reset below covers it
         self.model_switch_blending = not reset_state
         if wanted:
-          # the gas-override boost stopped learning while the model was out; start it again from zero
+          # the gas-override boost stopped learning while the model was out; start it again from zero,
+          # and let Acceleration Control's lift build up again from zero
           self.accel_boost = AccelBoost()
+          self.acceleration_control.reset()
     self.model_switch_frame += 1
 
   def update(self, sm):
@@ -185,7 +187,7 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     if self.model_controls_speed:
       # Acceleration Control first: Gas Override Boost latches "the model is limiting" from the candidate it is
       # given, so it has to see the lifted one or it learns a boost from overrides where the lead was the limit.
-      output_a_target_e2e = self.acceleration_control.update(sm, output_a_target_e2e, self.scc.governor.throttle_scale())
+      output_a_target_e2e = self.acceleration_control.update(sm, output_a_target_e2e, self.a_cruise, self.scc.governor.throttle_scale())
       output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
       if self.model_switch_blending:
         # just switched on: bring the model's braking in gradually. Only the model's request is held back;

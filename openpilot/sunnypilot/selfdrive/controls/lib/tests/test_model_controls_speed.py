@@ -13,6 +13,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.longitudinal_planner import (get_max_accel, limit_accel_in_turns, A_CRUISE_MIN,
                                                                    A_CRUISE_MIN_SPEED_CAP, MODEL_SWITCH_JERK,
                                                                    MODEL_SWITCH_MIN_SPEED, MODEL_SWITCH_REFRESH_FRAMES)
+from openpilot.sunnypilot.selfdrive.controls.lib.acceleration_control import LIFT_RISE
 from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control_planner import Source, _planner
 
 V_EGO = 25.0  # m/s, what _planner drives at
@@ -165,13 +166,15 @@ def test_lead_braking_is_never_eased(monkeypatch, on):
   assert planner.mpc.source == Source.lead0
 
 
-def test_switching_on_restarts_the_override_boost(monkeypatch):
+def test_switching_on_restarts_the_override_boost_and_the_lift(monkeypatch):
   planner, sm = _setup(monkeypatch, False, raw=0.2)
   planner.accel_boost.total_boost = 0.15
+  planner.acceleration_control.lift = 0.2  # left over from before the model was switched out
   _switch(planner, sm, True)
   _run(planner, sm, 1)
   assert planner.model_controls_speed
   assert planner.accel_boost.total_boost == 0.0
+  assert planner.acceleration_control.lift <= LIFT_RISE * DT_MDL + 1e-9
 
 
 def test_no_switch_at_a_crawl_while_openpilot_controls_the_speed(monkeypatch):

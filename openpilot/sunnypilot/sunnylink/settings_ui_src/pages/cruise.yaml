@@ -48,12 +48,13 @@ sections:
     widget: toggle
     title: Acceleration Control
     description: >-
-      Adds a personality-linked increase to the model acceleration candidate: Relaxed 0.1, Standard
-      0.2, Aggressive 0.3 m/s^2 at full activation. No increase at raw model requests <= 0; ramps to
-      full at 0.1 m/s^2. Speed activation ramps from zero at 10 mph to full at 20 mph. No increase
-      when the model predicts a stop. The separate gas override is unchanged. Cruise and lead
-      candidates and acceleration limits still constrain the planner. Can only be changed while
-      parked.
+      When the driving model holds the car below the set speed, lifts its acceleration request
+      toward the cruise speed, never past it: up to Relaxed 0.1, Standard 0.2, Aggressive 0.3 m/s^2.
+      Full lift while the model asks for 0 or more, none once it asks for -0.2. Backs off when the
+      model plans to slow down soon or in a bend ahead, and drops at once if the model brakes harder
+      than -0.5 m/s^2 or predicts a stop. Builds up and falls away gradually. Ramps in from 10 to 20
+      mph (16 to 32 km/h). No effect while Model Controls Speed is off. Lead following and
+      acceleration limits still apply. Can only be changed while parked.
     enablement:
     - $ref: '#/macros/offroad'
     - $ref: '#/macros/longitudinal'

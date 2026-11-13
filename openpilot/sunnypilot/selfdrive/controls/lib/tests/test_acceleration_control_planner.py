@@ -17,7 +17,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner, T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP
-from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control import _assist, _sm
+from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control import SETTLE, _assist, _sm
 
 Source = log.LongitudinalPlan.LongitudinalPlanSource
 
@@ -136,15 +136,20 @@ def _publication_fields(planner):
 ])
 def test_actual_planner_winners_ties_and_limits(monkeypatch, raw, cruise, lead, enabled, expected, source):
   planner, sm = _planner(monkeypatch, raw, cruise, lead, enabled)
-  planner.update(sm)
+  for _ in range(SETTLE):  # the lift builds up over a few frames
+    planner.update(sm)
   assert planner.output_a_target == pytest.approx(expected, abs=1e-6)
   assert planner.mpc.source == source
 
 
-@pytest.mark.parametrize('cruise,lead', [(0.1, 1), (1, 0.05)])
-def test_parent_to_sp_requested_telemetry_and_disable(monkeypatch, cruise, lead):
+@pytest.mark.parametrize('cruise,lead,requested', [
+  (0.1, 1, 0.0),  # the cruise ramp is already at the model's request: nothing to lift toward
+  (1, 0.05, 0.2),  # well below the set speed: full lift requested, the lead still wins
+])
+def test_parent_to_sp_requested_telemetry_and_disable(monkeypatch, cruise, lead, requested):
   planner, sm = _planner(monkeypatch, 0.1, cruise, lead)
-  planner.update(sm)
+  for _ in range(SETTLE):
+    planner.update(sm)
   # Real capnp vCruise is float32; its kph -> m/s conversion has sub-micro precision.
   assert planner.output_a_target <= 0.1 + 1e-6
   _publication_fields(planner)
@@ -153,8 +158,7 @@ def test_parent_to_sp_requested_telemetry_and_disable(monkeypatch, cruise, lead)
   shared = pm.messages['longitudinalPlan']
   fork = pm.messages['longitudinalPlanSP']
   assert 'accelerationControlBoost' not in shared
-  assert fork['accelerationControlBoostRequested'] == pytest.approx(0.2)
-  assert fork['accelerationControlBoostRequested'] > shared['aTarget']
+  assert fork['accelerationControlBoostRequested'] == pytest.approx(requested, abs=1e-6)
   # Same object, positive preceding request: disabled update must publish zero.
   sm['selfdriveState'].enabled = False
   planner.update(sm)
