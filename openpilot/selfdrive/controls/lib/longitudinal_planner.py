@@ -235,4 +235,4 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
 
     pm.send('longitudinalPlan', plan_send)
 
-    self.publish_longitudinal_plan_sp(sm, pm, self.acceleration_control.boost)
+    self.publish_longitudinal_plan_sp(sm, pm, self.acceleration_control.boost, model_speed_off=not self.model_controls_speed)

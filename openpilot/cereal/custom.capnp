@@ -208,6 +208,9 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   e2eAlerts @7 :E2eAlerts;
   # Requested increase to the model candidate before min-selection, not actuator acceleration.
   accelerationControlBoostRequested @8 :Float32;
+  # "Model Controls Speed" turned off: the planner is leaving the model's request out (what it is doing, which can lag
+  # the setting by up to half a second). Named for off so logs and branches without the field read as the model on.
+  modelSpeedOff @9 :Bool;
 
   deprecated :group {
     dec @0 :DynamicExperimentalControlDEPRECATED;

@@ -14,7 +14,8 @@ from openpilot.selfdrive.controls.lib.longitudinal_planner import (get_max_accel
                                                                    A_CRUISE_MIN_SPEED_CAP, MODEL_SWITCH_JERK,
                                                                    MODEL_SWITCH_MIN_SPEED, MODEL_SWITCH_REFRESH_FRAMES)
 from openpilot.sunnypilot.selfdrive.controls.lib.acceleration_control import LIFT_RISE
-from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control_planner import Source, _planner
+from openpilot.sunnypilot.selfdrive.controls.lib.tests.test_acceleration_control_planner import (Source, _planner, Publisher,
+                                                                                               _publication_fields)
 
 V_EGO = 25.0  # m/s, what _planner drives at
 STEER_RATIO = 15.0
@@ -253,3 +254,27 @@ def test_back_to_the_gentle_limit_is_eased(monkeypatch):
   accels = [A_CRUISE_MIN_SPEED_CAP] + [a for a, _ in _run(planner, sm, 30)]
   assert max(b - a for a, b in zip(accels, accels[1:], strict=False)) <= 0.8 * DT_MDL + 1e-9
   assert accels[-1] == pytest.approx(A_CRUISE_MIN)
+
+
+@pytest.mark.parametrize('model_on', [True, False])
+def test_published_so_logs_and_opview_can_show_it(monkeypatch, model_on):
+  # what the planner is doing goes out on longitudinalPlanSP: the setting itself is saved only once per drive
+  planner, sm = _setup(monkeypatch, model_on)
+  planner.update(sm)
+  _publication_fields(planner)
+  pm = Publisher()
+  planner.publish(sm, pm)
+  assert pm.messages['longitudinalPlanSP'].get('modelSpeedOff', False) is (not model_on)
+
+
+def test_published_value_follows_the_planner_not_the_setting(monkeypatch):
+  # switched off below the backstop speed: the planner keeps the model, so the log must still say on
+  planner, sm = _setup(monkeypatch, True)
+  sm['carState'].vEgo = MODEL_SWITCH_MIN_SPEED - 1.0
+  planner.params.model_controls_speed = False
+  planner.update(sm)
+  _publication_fields(planner)
+  pm = Publisher()
+  planner.publish(sm, pm)
+  assert planner.model_controls_speed
+  assert not pm.messages['longitudinalPlanSP'].get('modelSpeedOff', False)

@@ -104,3 +104,16 @@ def test_longitudinal_plan_explicitly_empty():
     assert message.allowThrottle is False
     assert opview_slim.slim('longitudinalPlan', message) == {}
     assert json.dumps(opview_slim.slim('longitudinalPlan', message)) == '{}'
+
+
+def test_long_plan_sp_carries_model_speed_off_and_the_lift():
+  def build(plan):
+    plan.modelSpeedOff = True
+    plan.accelerationControlBoostRequested = 0.123456
+    plan.vTarget = 30.  # not read by opview
+  out = opview_slim.slim('longitudinalPlanSP', _reader('longitudinalPlanSP', build))
+  assert out['modelSpeedOff'] is True
+  assert out['accelerationControlBoostRequested'] == 0.123
+  assert 'vTarget' not in out
+  # the default is sent too, so the app can tell "model on" from an older branch that has no field
+  assert opview_slim.slim('longitudinalPlanSP', _reader('longitudinalPlanSP', lambda plan: None))['modelSpeedOff'] is False

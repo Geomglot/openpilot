@@ -108,13 +108,15 @@ class LongitudinalPlannerSP:
     self.events_sp.clear()
     self.e2e_alerts_helper.update(sm, self.events_sp)
 
-  def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster, acceleration_control_boost_requested: float) -> None:
+  def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster, acceleration_control_boost_requested: float,
+                                   model_speed_off: bool = False) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')
 
     plan_sp_send.valid = sm.all_checks(service_list=['carState', 'controlsState'])
 
     longitudinalPlanSP = plan_sp_send.longitudinalPlanSP
     longitudinalPlanSP.accelerationControlBoostRequested = float(acceleration_control_boost_requested)
+    longitudinalPlanSP.modelSpeedOff = bool(model_speed_off)
     longitudinalPlanSP.longitudinalPlanSource = self.source
     longitudinalPlanSP.vTarget = float(self.output_v_target)
     longitudinalPlanSP.aTarget = float(self.output_a_target)

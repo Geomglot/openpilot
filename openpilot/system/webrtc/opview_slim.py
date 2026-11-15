@@ -64,6 +64,8 @@ OPVIEW_FIELDS: dict[str, dict] = {
       },
       "assist": {"state": True},
     },
+    # the light blue set speed while "Model Controls Speed" is off, and the Acceleration Control lift row
+    "modelSpeedOff": True, "accelerationControlBoostRequested": True,
   },
   "liveMapDataSP": {"speedLimitAheadValid": True, "speedLimitAhead": True, "speedLimitAheadDistance": True, "roadName": True},
   "carControl": {"latActive": True, "longActive": True, "actuators": {"accel": True, "steeringAngleDeg": True}},
