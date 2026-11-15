@@ -235,4 +235,6 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
 
     pm.send('longitudinalPlan', plan_send)
 
-    self.publish_longitudinal_plan_sp(sm, pm, self.acceleration_control.boost, model_speed_off=not self.model_controls_speed)
+    # only where openpilot controls the speed, as the on-device set speed colour; opview cannot see CarParams
+    model_speed_off = not self.model_controls_speed and self.CP.openpilotLongitudinalControl
+    self.publish_longitudinal_plan_sp(sm, pm, self.acceleration_control.boost, model_speed_off=model_speed_off)

@@ -278,3 +278,14 @@ def test_published_value_follows_the_planner_not_the_setting(monkeypatch):
   planner.publish(sm, pm)
   assert planner.model_controls_speed
   assert not pm.messages['longitudinalPlanSP'].get('modelSpeedOff', False)
+
+
+def test_not_published_without_openpilot_speed_control(monkeypatch):
+  # the setting can be off on a car where openpilot does not control the speed; nothing to show there
+  planner, sm = _setup(monkeypatch, False)
+  planner.CP.openpilotLongitudinalControl = False
+  planner.update(sm)
+  _publication_fields(planner)
+  pm = Publisher()
+  planner.publish(sm, pm)
+  assert not pm.messages['longitudinalPlanSP'].get('modelSpeedOff', False)
