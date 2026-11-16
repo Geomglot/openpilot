@@ -205,7 +205,7 @@ class AugmentedRoadView(CameraView):
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     # Don't trigger the go-home click if the bookmark swipe or a HUD tap (wheel angle/torque toggle,
-    # MAX box Model Controls Speed switch) consumed this touch.
+    # MAX box Use Legacy (Chill) Speed Control switch) consumed this touch.
     if not self._bookmark_icon.interacting() and not self._hud_renderer.hud_tap_consumed():
       super()._handle_mouse_release(mouse_pos)
 

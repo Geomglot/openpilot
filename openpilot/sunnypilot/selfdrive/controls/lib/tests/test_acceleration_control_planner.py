@@ -61,13 +61,14 @@ class Publisher:
 
 
 class SettingParams:
-  """Params as the planner reads it each half second: only the "Model Controls Speed" key, on by default."""
+  """Params as the planner reads it each half second: only the "Use Legacy (Chill) Speed Control" key, stored
+  reversed. model_controls_speed is the planner's view (True = model on = legacy off, the default)."""
   def __init__(self, model_controls_speed=True):
     self.model_controls_speed = model_controls_speed
 
-  def get(self, key, return_default=False):
-    assert key == "ModelControlsSpeed"
-    return self.model_controls_speed
+  def get_bool(self, key):
+    assert key == "LegacySpeedControl"
+    return not self.model_controls_speed
 
 
 def _planner(monkeypatch, raw, cruise, lead, enabled=True):

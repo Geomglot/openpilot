@@ -1,4 +1,4 @@
-"""The MAX box as the "Model Controls Speed" switch on the big UI: when a tap is taken, and what it writes.
+"""The MAX box as the "Use Legacy (Chill) Speed Control" switch on the big UI: when a tap is taken, and what it writes.
 
 The button is built without a window, so nothing is drawn. carState is a real capnp message; only Params is
 replaced, by a dict with the same get/put_bool calls.
@@ -17,10 +17,8 @@ class DictParams:
   def __init__(self, **values):
     self.values = dict(values)
 
-  def get(self, key, return_default=False):
-    if key not in self.values:
-      return True if return_default else None  # registered default "1"
-    return self.values[key]
+  def get_bool(self, key):
+    return bool(self.values.get(key, False))  # registered default "0"
 
   def put_bool(self, key, value):
     self.values[key] = bool(value)
@@ -60,19 +58,19 @@ def drive(monkeypatch):
   return _set
 
 
-def test_unwritten_setting_reads_as_on():
+def test_unwritten_setting_leaves_the_model_on():
   assert _button().model_on
 
 
 def test_tap_switches_the_setting_both_ways(drive):
   drive()
-  btn = _button(ModelControlsSpeed=True)
+  btn = _button(LegacySpeedControl=False)
   btn._handle_mouse_release(None)
   assert not btn.model_on
-  assert btn._params.values["ModelControlsSpeed"] is False
+  assert btn._params.values["LegacySpeedControl"] is True
   btn._handle_mouse_release(None)
   assert btn.model_on
-  assert btn._params.values["ModelControlsSpeed"] is True
+  assert btn._params.values["LegacySpeedControl"] is False
 
 
 @pytest.mark.parametrize("why, setup", [
@@ -83,23 +81,23 @@ def test_tap_switches_the_setting_both_ways(drive):
 ])
 def test_tap_is_ignored(drive, why, setup):
   drive(**setup)
-  btn = _button(ModelControlsSpeed=True)
+  btn = _button(LegacySpeedControl=False)
   btn._handle_mouse_release(None)
   assert btn.model_on, why
-  assert btn._params.values["ModelControlsSpeed"] is True, why
+  assert btn._params.values["LegacySpeedControl"] is False, why
 
 
 @pytest.mark.parametrize("setup", [{"mph": 20.5}, {"metric": True, "kph": 30.5}])
 def test_tap_is_taken_just_above_the_cut_off(drive, setup):
   drive(**setup)
-  btn = _button(ModelControlsSpeed=True)
+  btn = _button(LegacySpeedControl=False)
   btn._handle_mouse_release(None)
   assert not btn.model_on
 
 
 def test_follows_a_change_made_elsewhere(drive):
   drive()
-  btn = _button(ModelControlsSpeed=True)
-  btn._params.values["ModelControlsSpeed"] = False
+  btn = _button(LegacySpeedControl=False)
+  btn._params.values["LegacySpeedControl"] = True
   btn._update_state()
   assert not btn.model_on

@@ -324,7 +324,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // Acceleration Control
     {"AccelerationControl", {PERSISTENT | BACKUP, BOOL, "0"}},
-    {"ModelControlsSpeed", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"LegacySpeedControl", {PERSISTENT | BACKUP, BOOL, "0"}},
 
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},

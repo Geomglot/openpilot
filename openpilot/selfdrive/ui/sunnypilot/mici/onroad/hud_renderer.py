@@ -19,7 +19,7 @@ from openpilot.system.ui.lib.application import MousePos
 # tap target over the MAX box in the top-left corner (the box is about 162 px wide and ends near 145 px down)
 MAX_TAP_WIDTH = 162
 MAX_TAP_HEIGHT = 150
-# a tap switches Model Controls Speed only once the MAX box has been on screen this long, so a quick
+# a tap switches Use Legacy (Chill) Speed Control only once the MAX box has been on screen this long, so a quick
 # double tap on a hidden box (or a tap just after the switch) only shows it
 SWITCH_AFTER_SHOWN_S = 0.5
 MAX_SHOWING_ALPHA = 0.5
@@ -34,7 +34,7 @@ class HudRendererSP(HudRenderer):
     self._params = Params()
     self._angle_tap_armed = False
     self._sp_engaged: bool = False
-    # comma 4 Model Controls Speed switch on the MAX box: first tap shows the box, a second tap switches
+    # comma 4 Use Legacy (Chill) Speed Control switch on the MAX box: first tap shows the box, a second tap switches
     self.model_speed_button = ModelSpeedButton()
     self._max_tap_armed = False
     self._max_was_showing = False

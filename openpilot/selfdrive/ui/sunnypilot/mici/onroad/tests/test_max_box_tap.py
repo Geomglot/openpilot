@@ -1,4 +1,4 @@
-"""The comma 4 MAX box as the "Model Controls Speed" switch: first tap shows the box, a tap while it shows switches.
+"""The comma 4 MAX box as the "Use Legacy (Chill) Speed Control" switch: first tap shows the box, a tap while it shows switches.
 
 The HUD is built without a window, so nothing is drawn. The clock is a stand-in for rl.get_time, the box's fade is
 set directly on its filter, and Params is a dict with the same get/put_bool calls.
@@ -90,7 +90,7 @@ def _hud(model_on=True, showing_for=None, clock_now=100.0):
     hud._set_speed_changed_time = clock_now - showing_for
 
   btn = ModelSpeedButton.__new__(ModelSpeedButton)
-  btn._params = DictParams(ModelControlsSpeed=model_on)
+  btn._params = DictParams(LegacySpeedControl=not model_on)
   btn.model_on = model_on
   btn._last_read = 0.0
   hud.model_speed_button = btn
@@ -103,7 +103,7 @@ def _tap(hud, press=ON_BOX, release=None):
 
 
 def _model_on(hud):
-  return hud.model_speed_button._params.values["ModelControlsSpeed"]
+  return not hud.model_speed_button._params.values["LegacySpeedControl"]
 
 
 def test_first_tap_on_a_hidden_box_only_shows_it(clock, drive):

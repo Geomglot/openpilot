@@ -111,7 +111,7 @@ class HudRendererSP(HudRenderer):
         elif ui_state.status == UIStatus.OVERRIDE:
           max_color = COLORS.OVERRIDE
 
-    # "Model Controls Speed" off: light blue set speed, over the Speed Limit Assist green (MAX keeps that)
+    # "Use Legacy (Chill) Speed Control" on: light blue set speed, over the Speed Limit Assist green (MAX keeps that)
     if self.model_speed_button.visible() and not self.model_speed_button.model_on:
       set_speed_color = MODEL_OFF_COLOR if self.is_cruise_set else MODEL_OFF_DIM_COLOR
 
@@ -152,7 +152,7 @@ class HudRendererSP(HudRenderer):
     self._set_speed_rect = None
     super()._render(rect)
 
-    # the MAX box doubles as the "Model Controls Speed" switch while it is on screen
+    # the MAX box doubles as the "Use Legacy (Chill) Speed Control" switch while it is on screen
     if self._set_speed_rect is not None and self.model_speed_button.visible():
       self.model_speed_button.render(self._set_speed_rect)
 

@@ -13,7 +13,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets import Widget
 
-# set-speed number while "Model Controls Speed" is off
+# set-speed number while "Use Legacy (Chill) Speed Control" is on
 MODEL_OFF_COLOR = rl.Color(0x7d, 0xc8, 0xff, 0xff)
 MODEL_OFF_DIM_COLOR = rl.Color(0x7d, 0xc8, 0xff, 0x80)
 
@@ -28,7 +28,7 @@ def tap_min_speed_ms() -> float:
 
 
 class ModelSpeedButton(Widget):
-  """Invisible tap target over the MAX box: a tap switches "Model Controls Speed" while driving.
+  """Invisible tap target over the MAX box: a tap switches "Use Legacy (Chill) Speed Control" while driving.
 
   It draws nothing itself; the HUD colours the set speed from model_on. The planner picks the change up within
   half a second and eases it in.
@@ -41,8 +41,8 @@ class ModelSpeedButton(Widget):
     self._last_read = time.monotonic()
 
   def _read(self) -> bool:
-    # an unwritten key reads as on, the registered default
-    return bool(self._params.get("ModelControlsSpeed", return_default=True))
+    # model_on is the setting reversed: "Use Legacy (Chill) Speed Control" off (the default) leaves the model on
+    return not self._params.get_bool("LegacySpeedControl")
 
   @staticmethod
   def visible() -> bool:
@@ -68,7 +68,7 @@ class ModelSpeedButton(Widget):
     if not self.tap_allowed():
       return False
     self.model_on = not self.model_on
-    self._params.put_bool("ModelControlsSpeed", self.model_on)
+    self._params.put_bool("LegacySpeedControl", not self.model_on)
     self._last_read = time.monotonic()
     return True
 

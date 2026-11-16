@@ -1,7 +1,8 @@
-"""The "Model controls speed" setting, through the real planner update.
+"""The "Use Legacy (Chill) Speed Control" setting, through the real planner update.
 
-On (the default) the model's request competes in the planner exactly as before. Off, it is left out, and the
-cruise ramp gets back the acceleration and turn limits of the old non-Experimental planner. It can be switched
+The tests speak of the model on or off, the planner's view: setting off (the default) is the model on, and the
+model's request competes in the planner exactly as before. Setting on is the model off: its request is left out, and
+the cruise ramp gets back the acceleration and turn limits of the old Chill planner. It can be switched
 while driving: the planner picks the change up within half a second, not at a crawl, and eases it in. The MPC
 and the unrelated sunnypilot controllers are the same seams as in test_acceleration_control_planner.
 """
@@ -289,3 +290,12 @@ def test_not_published_without_openpilot_speed_control(monkeypatch):
   pm = Publisher()
   planner.publish(sm, pm)
   assert not pm.messages['longitudinalPlanSP'].get('modelSpeedOff', False)
+
+
+def test_setting_is_registered_off_by_default():
+  # off by default, so a fresh install or a cleared setting leaves the model in charge of the speed
+  from pathlib import Path
+  with open(Path(__file__).resolve().parents[5] / "common" / "params_keys.h") as f:
+    keys = f.read()
+  assert '{"LegacySpeedControl", {PERSISTENT | BACKUP, BOOL, "0"}},' in keys
+  assert '"ModelControlsSpeed"' not in keys

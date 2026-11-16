@@ -23,8 +23,8 @@ def main():
   cloudlog.info("plannerd got CarParamsSP")
 
   gps_location_service = get_gps_location_service(params)
-  # vehicleParameters only feeds the turn limit used when "Model controls speed" is off; a missing angle offset reads
-  # as zero there, so it must never mark the plan invalid
+  # vehicleParameters only feeds the turn limit used when "Use Legacy (Chill) Speed Control" is on; a missing angle
+  # offset reads as zero there, so it must never mark the plan invalid
   ignore_services = ["liveMapDataSP", "carStateSP", "selfdriveStateSP", gps_location_service, "vehicleParameters"]
 
   ldw = LaneDepartureWarning()

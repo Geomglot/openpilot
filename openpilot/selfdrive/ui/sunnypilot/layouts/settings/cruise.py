@@ -76,15 +76,15 @@ class CruiseLayout(Widget):
     self.acceleration_control_toggle = toggle_item_sp(
       title=tr("Acceleration Control"),
       # Keep a literal so the AST translation extractor sees the complete message.
-      description=tr('When the driving model holds the car below the set speed, lifts its acceleration request toward the cruise speed, never past it: up to Relaxed 0.1, Standard 0.2, Aggressive 0.3 m/s^2. Full lift while the model asks for 0 or more, none once it asks for -0.2. Backs off when the model plans to slow down soon or in a bend ahead, and drops at once if the model brakes harder than -0.5 m/s^2 or predicts a stop. Builds up and falls away gradually. Ramps in from 10 to 20 mph (16 to 32 km/h). No effect while Model Controls Speed is off. Lead following and acceleration limits still apply. Can only be changed while parked.'),  # noqa: E501
+      description=tr('When the driving model holds the car below the set speed, lifts its acceleration request toward the cruise speed, never past it: up to Relaxed 0.1, Standard 0.2, Aggressive 0.3 m/s^2. Full lift while the model asks for 0 or more, none once it asks for -0.2. Backs off when the model plans to slow down soon or in a bend ahead, and drops at once if the model brakes harder than -0.5 m/s^2 or predicts a stop. Builds up and falls away gradually. Ramps in from 10 to 20 mph (16 to 32 km/h). No effect while Use Legacy (Chill) Speed Control is on. Lead following and acceleration limits still apply. Can only be changed while parked.'),  # noqa: E501
       param="AccelerationControl")
 
     self.model_controls_speed_toggle = toggle_item_sp(
-      title=tr("Model Controls Speed"),
+      title=tr("Use Legacy (Chill) Speed Control"),
       # Keep a literal so the AST translation extractor sees the complete message.
       # A callable, re-read each frame, so the tap speed follows the metric setting.
-      description=lambda: tr('On (default): the driving model can slow the car below the set speed, as in Experimental Mode. Off: cruise holds the set speed and slows only for a lead car, like the old non-Experimental mode. With it off the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is off. Can only be changed here while parked. While driving above {speed}, tap the MAX box to switch it; the set speed shows light blue while it is off.').format(speed="30 km/h" if ui_state.is_metric else "20 mph"),  # noqa: E501
-      param="ModelControlsSpeed")
+      description=lambda: tr('Off (default): the driving model can slow the car below the set speed, as in Experimental Mode. On: cruise holds the set speed and slows only for a lead car, like the old Chill mode. With it on the car will not slow for stop lights, stop signs or curves; turn on Curve Speed Control for curves. Acceleration Control has no effect while it is on. Can only be changed here while parked. While driving above {speed}, tap the MAX box to switch it; the set speed shows light blue while it is on.').format(speed="30 km/h" if ui_state.is_metric else "20 mph"),  # noqa: E501
+      param="LegacySpeedControl")
 
     self.custom_acc_toggle = toggle_item_sp(
       title=tr("Custom ACC Speed Increments"),
@@ -180,7 +180,7 @@ class CruiseLayout(Widget):
     self.icbm_toggle.show_description(True)
     self.custom_acc_toggle.show_description(True)
     # the MAX box tap can change this while driving, after the toggle last read it
-    self.model_controls_speed_toggle.action_item.set_state(bool(ui_state.params.get("ModelControlsSpeed", return_default=True)))
+    self.model_controls_speed_toggle.action_item.set_state(ui_state.params.get_bool("LegacySpeedControl"))
 
   def _set_current_panel(self, panel: PanelType):
     self._current_panel = panel
@@ -244,7 +244,7 @@ class CruiseLayout(Widget):
       if not has_long:
         ui_state.params.remove("SPFollowingTimeOffset")
         ui_state.params.remove("AccelerationControl")
-        ui_state.params.remove("ModelControlsSpeed")
+        ui_state.params.remove("LegacySpeedControl")
         ui_state.params.remove("SPStopDistance")
         ui_state.params.remove("SPStopDistancePersonality")
 

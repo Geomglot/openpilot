@@ -25,7 +25,7 @@ J_CRUISE_BP = [0., 10.0, 25., 40.]
 A_CRUISE_MIN = -0.5
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
-# sunnypilot "Model controls speed" off: the cruise limits of the non-Experimental planner that upstream
+# sunnypilot "Use Legacy (Chill) Speed Control" on: the cruise limits of the Chill planner that upstream
 # removed in #39097, restored unchanged.
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
@@ -37,7 +37,7 @@ _A_TOTAL_MAX_BP = [20., 40.]
 A_CRUISE_MIN_SPEED_CAP = -1.2
 
 
-# "Model controls speed" can be switched while driving (a tap on the MAX box). The planner picks it up within half
+# "Use Legacy (Chill) Speed Control" can be switched while driving (a tap on the MAX box). The planner picks it up within half
 # a second, never below MODEL_SWITCH_MIN_SPEED while openpilot is controlling the speed (switching off at a red light
 # with no lead would set off towards the set speed), and eases the change in at MODEL_SWITCH_JERK instead of jumping.
 MODEL_SWITCH_REFRESH_FRAMES = 10  # 0.5 s at the 20 Hz planner rate
@@ -73,9 +73,9 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.dt = dt
     self.accel_boost = AccelBoost()
     self.acceleration_control = AccelerationControl(CP)
-    # Off: the model's acceleration request is left out of the planner, as in the old non-Experimental mode.
-    # A key that was never written (fresh params, simulations, replay) must read as on, the upstream behaviour,
-    # so use the registered default.
+    # Model off ("Use Legacy (Chill) Speed Control" on): the model's acceleration request is left out of the planner,
+    # as in the old Chill mode. A key that was never written (fresh params, simulations, replay) reads as off, so the
+    # model stays on, the upstream behaviour.
     self.params = Params()
     self.model_controls_speed = self._read_model_controls_speed()
     self.model_switch_frame = 0
@@ -94,7 +94,8 @@ class LongitudinalPlanner(LongitudinalPlannerSP):
     self.j_desired_trajectory = np.zeros(CONTROL_N)
 
   def _read_model_controls_speed(self) -> bool:
-    return bool(self.params.get("ModelControlsSpeed", return_default=True))
+    # the setting is "Use Legacy (Chill) Speed Control": off (the default) leaves the model in charge of the speed
+    return not self.params.get_bool("LegacySpeedControl")
 
   def _update_model_controls_speed(self, v_ego: float, reset_state: bool) -> None:
     if self.model_switch_frame % MODEL_SWITCH_REFRESH_FRAMES == 0:
