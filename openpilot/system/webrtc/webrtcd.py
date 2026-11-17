@@ -185,14 +185,14 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       cloudlog.event("webrtcd.opview.send_failure", failures=self._stats["failures"],
                      exception=traceback.format_exc(limit=4), error=True)
 
-  def _car_brand_flags(self) -> tuple[str, int]:
+  def _car_brand_flags(self) -> tuple[str, int, bool]:
     # carParams is only published every ~50 s, so use the copy the car interface saves at start-up
     if self._car is None:
       cp_bytes = self.params.get("CarParamsPersistent")
       if not cp_bytes:
-        return "", 0
+        return "", 0, False
       cp = messaging.log_from_bytes(cp_bytes, car.CarParams)
-      self._car = (cp.brand, cp.flags)
+      self._car = (cp.brand, cp.flags, cp.openpilotLongitudinalControl)
     return self._car
 
   def _param_bool(self, key: str) -> bool:
@@ -209,10 +209,13 @@ class CerealOutgoingMessageProxy(AsyncTaskRunner):
       return 0
 
   def _opview_params(self) -> dict[str, Any]:
-    brand, flags = self._car_brand_flags()
+    brand, flags, long = self._car_brand_flags()
     return {
       "CarBrand": brand,
       "CarFlags": flags,
+      # this branch has no Experimental mode: the screen shows the wide camera at low speed whenever openpilot
+      # controls longitudinal (augmented_road_view.py), and opview follows it. Older branches leave this out.
+      "OpenpilotLongitudinalControl": long,
       "IsMetric": self._param_bool("IsMetric"),
       "SpeedLimitMode": self._param_int("SpeedLimitMode"),
       "RoadNameToggle": self._param_bool("RoadNameToggle"),
