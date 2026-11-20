@@ -219,7 +219,10 @@ class UIState(UIStateSP):
         self.status = UIStatus.DISENGAGED
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()
-        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and self.usb_connected)
+        # a cable plus compiled big-model files means a chestnut, unless Jetlink is on: then the
+        # cable is its phone or computer, and the chestnut state would read failed all drive
+        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and self.usb_connected
+                                                                             and not jetlink_adapter.link_on())
 
       for callback in self._offroad_transition_callbacks:
         callback()
