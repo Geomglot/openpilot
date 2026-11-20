@@ -107,6 +107,19 @@ def _adapter_class():
       from openpilot.selfdrive.modeld.helpers import chestnut_present
       return chestnut_present()
 
+    def action_function(self):
+      # modeld_v2 calls the driving model's action function with a sixth
+      # positional argument, the Blendful correction. Stock modeld's sixth is
+      # lat_smooth_seconds, so passing it through put a functools.partial where
+      # a float belongs and killed modeld_tinygrad the first frame the car moved.
+      # The large model takes stock's action path with its own smoothing;
+      # Blendful does not apply while it drives
+      from openpilot.selfdrive.modeld.modeld import get_action_from_model
+
+      def action(model_output, prev_action, lat_action_t, long_action_t, v_ego, blendful=None):
+        return get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego)
+      return action
+
     def model_constants(self):
       # modeld_tinygrad reads modeld_v2's off the model
       from openpilot.sunnypilot.modeld_v2.constants import ModelConstants
