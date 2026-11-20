@@ -94,8 +94,11 @@ def _adapter_class():
     KEYS = Keys(**KEYS._asdict())
     # MADS's state rides on carControlSP
     IN_CONTROL_SERVICES = ('carState', 'carControl', 'carControlSP')
-    # modeld_v2's warp pickles, not stock modeld's models directory
-    WARP_DIR = 'openpilot/sunnypilot/modeld_v2/models'
+    # stock modeld's warp pickles: since the sunnypilot sync, modeld_v2 keeps its
+    # warps in its own container format (helpers.read_parts), which jetlink's
+    # loader cannot read. Stock scons still builds the same 2-frame warp to the
+    # model's input size as a plain pickle
+    WARP_DIR = 'openpilot/selfdrive/modeld/models'
 
     def chestnut_present(self) -> bool:
       # modeld's own test, the one it runs the big model on: a chestnut whose
