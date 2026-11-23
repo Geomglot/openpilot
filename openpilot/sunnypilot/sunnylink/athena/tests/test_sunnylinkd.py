@@ -58,3 +58,11 @@ class TestSunnylinkdMethods(OpenpilotTestCase):
     assert len(self.saved_params) == 1
     assert self.saved_params[0][0] == "SpeedLimitOffset"
     assert self.saved_params[0][1] == "10"
+
+  def test_saveParams_bumps_params_version(self):
+    # ParamsVersion is an INT param; the Sunnylink page watches it to notice changes
+    sunnylinkd.params.remove("ParamsVersion")
+    sunnylinkd.saveParams({"SpeedLimitOffset": "5"})
+    assert sunnylinkd.params.get("ParamsVersion") == 1
+    sunnylinkd.saveParams({"SpeedLimitOffset": "6"})
+    assert sunnylinkd.params.get("ParamsVersion") == 2

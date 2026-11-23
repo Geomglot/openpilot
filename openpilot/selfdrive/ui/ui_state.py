@@ -161,8 +161,16 @@ class UIState(UIStateSP):
 
   def _params_refresh_worker(self):
     drop_realtime()
+    last_error = None
     while True:
-      self.update_params()
+      # one bad param must not kill this thread, or every settings screen freezes until reboot
+      try:
+        self.update_params()
+        last_error = None
+      except Exception as e:
+        if repr(e) != last_error:  # log each new error once, not 5 times a second
+          cloudlog.exception("ui.params_refresh_worker")
+          last_error = repr(e)
       time.sleep(PARAM_UPDATE_TIME)
 
   def _update_state(self) -> None:
