@@ -343,8 +343,8 @@
             {
               "key": "LaneCenteringEnabled",
               "widget": "toggle",
-              "title": "Lane Centering",
-              "description": "Keep the car in the middle of the painted lane instead of wherever the driving model chooses to sit. Only acts when both lane lines are clearly visible (unless One-Line Mode is on), and steps aside for lane changes and turn signals. Turning this on turns off Blendful.",
+              "title": "Lane Centering (deprecated)",
+              "description": "Keep the car in the middle of the painted lane instead of wherever the driving model chooses to sit. Only acts when both lane lines are clearly visible (unless One-Line Mode is on), and steps aside for lane changes and turn signals. Turning this on turns off Blendful. Deprecated means this feature might be removed in a future version in favor of Blendful.",
               "details": "Corrections are deliberately small and are smoothed in over about half a second, so this should read as the car\nsitting straighter rather than as active steering. Whenever the lane lines become unreliable, a lane change starts\nor a turn signal comes on, the correction fades away rather than being dropped in one go."
             }
           ],

@@ -29,7 +29,8 @@ LANE_CENTERING_DESC = "{main} {note}".format(
   main=tr("Keep the car in the middle of the painted lane instead of wherever the driving model chooses to sit. " +
           "Only acts when both lane lines are clearly visible, and steps aside for lane changes and turn signals."),
   note=tr("Corrections are small and gentle; a confident model that deliberately moves well off center is left alone. " +
-          "Turning this on turns off Blendful."),
+          "Turning this on turns off Blendful. Deprecated means this feature might be removed in a future version " +
+          "in favor of Blendful."),
 )
 
 
@@ -91,7 +92,7 @@ class SteeringLayout(Widget):
     )
     self._lane_centering_toggle = toggle_item_sp(
       param="LaneCenteringEnabled",
-      title=lambda: tr("Lane Centering"),
+      title=lambda: tr("Lane Centering (deprecated)"),
       description=LANE_CENTERING_DESC,
     )
     self._lane_centering_settings_button = simple_button_item_sp(
