@@ -28,7 +28,8 @@ ANGLE_STEERING_OFFROAD_ONLY = tr("Turn the vehicle off to change this setting.")
 LANE_CENTERING_DESC = "{main} {note}".format(
   main=tr("Keep the car in the middle of the painted lane instead of wherever the driving model chooses to sit. " +
           "Only acts when both lane lines are clearly visible, and steps aside for lane changes and turn signals."),
-  note=tr("Corrections are small and gentle; a confident model that deliberately moves well off center is left alone."),
+  note=tr("Corrections are small and gentle; a confident model that deliberately moves well off center is left alone. " +
+          "Turning this on turns off Blendful."),
 )
 
 
@@ -191,6 +192,8 @@ class SteeringLayout(Widget):
       self._enable_angle_steering.set_description(desc)
     # "always torque below speed" is only relevant when angle steering is available and enabled
     self._angle_min_speed.set_visible(angle_avail and self._enable_angle_steering.action_item.get_state())
+    # Blendful (Models menu or Sunnylink) can switch this off, so follow the param
+    self._lane_centering_toggle.action_item.set_state(ui_state.params.get_bool("LaneCenteringEnabled"))
     self._lane_centering_settings_button.action_item.set_enabled(self._lane_centering_toggle.action_item.get_state())
     self._blinker_control_options.set_visible(self._blinker_control_toggle.action_item.get_state())
     self._blinker_reengage_delay.set_visible(self._blinker_control_toggle.action_item.get_state())
