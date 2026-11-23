@@ -229,7 +229,8 @@ class UIStateSP:
       else:
         lane_centering = False
       # let the Sunnylink page know the other toggle changed too
-      self.params.put("ParamsVersion", str(int(self.params.get("ParamsVersion") or "0") + 1), block=True)
+      # ParamsVersion is an INT param: writing a str raises TypeError, which would kill the params thread
+      self.params.put("ParamsVersion", (self.params.get("ParamsVersion") or 0) + 1, block=True)
     self._prev_lane_centering = lane_centering
     self._prev_blendful = blendful
 
