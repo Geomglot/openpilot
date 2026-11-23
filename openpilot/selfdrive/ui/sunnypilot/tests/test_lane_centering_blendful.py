@@ -9,7 +9,12 @@ import pytest
 from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP, lane_centering_blendful_loser
 
 
+INT_KEYS = {"ParamsVersion"}
+BOOL_KEYS = {"LaneCenteringEnabled", "Blendful"}
+
+
 class FakeParams:
+  """Enforces param types like the real Params: a wrong type raises TypeError."""
   def __init__(self, **values):
     self.values = dict(values)
 
@@ -17,12 +22,16 @@ class FakeParams:
     return bool(self.values.get(key, False))
 
   def put_bool(self, key, value, block=False):
+    if key not in BOOL_KEYS or not isinstance(value, bool):
+      raise TypeError(f"put_bool on {key} with {value!r}")
     self.values[key] = value
 
   def get(self, key):
     return self.values.get(key)
 
   def put(self, key, value, block=False):
+    if key in INT_KEYS and not (isinstance(value, int) and not isinstance(value, bool)):
+      raise TypeError(f"Type mismatch while writing param {key}: {value!r}")
     self.values[key] = value
 
 
@@ -74,9 +83,15 @@ def test_switching_back_and_forth():
 
 
 def test_flip_bumps_params_version_for_sunnylink():
-  ui = _ui(ParamsVersion="7")
+  ui = _ui(ParamsVersion=7)
   _set(ui, True, True)
-  assert ui.params.get("ParamsVersion") == "8"
+  assert ui.params.get("ParamsVersion") == 8
+
+
+def test_flip_with_no_params_version_yet():
+  ui = _ui()
+  _set(ui, True, True)
+  assert ui.params.get("ParamsVersion") == 1
 
 
 def test_loser_helper():
