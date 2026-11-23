@@ -102,7 +102,8 @@ class ModelsLayoutMici(NavScroller):
 
     self.blendful_toggle = BigParamControl(tr("blendful (alpha)"), "Blendful",
                                            description=tr("Adds a gentle nudge toward lane center on top of the model's own steering, stronger when " +
-                                                          "lane lines are clear. Yields around obstacles. Not available with the Default model."))
+                                                          "lane lines are clear. Yields around obstacles. Not available with the Default model. " +
+                                                          "Turning this on turns off Lane Centering."))
 
     self.main_items = [self.current_model_info, self.jetlink_btn, self.select_model_btn, self.cancel_download_btn, self.refresh_btn, self.clear_cache_btn,
                        self.blendful_toggle]

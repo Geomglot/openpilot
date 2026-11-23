@@ -22,6 +22,17 @@ MADSState = custom.ModularAssistiveDrivingSystem.ModularAssistiveDrivingSystemSt
 ONROAD_BRIGHTNESS_TIMER_PAUSED = -1
 
 
+def lane_centering_blendful_loser(lane_centering: bool, blendful: bool, prev_lane_centering: bool, prev_blendful: bool) -> str | None:
+  """Lane Centering and Blendful both pull toward lane center, so only one may be on.
+  Returns the param to turn off, or None. The one switched on most recently wins; if neither
+  can be told apart (both already on at start-up), Blendful wins."""
+  if not (lane_centering and blendful):
+    return None
+  if lane_centering and not prev_lane_centering and prev_blendful:
+    return "Blendful"
+  return "LaneCenteringEnabled"
+
+
 class OnroadTimerStatus(Enum):
   NONE = 0
   PAUSE = 1
@@ -69,6 +80,8 @@ class UIStateSP:
     self.custom_torque_params: bool = False
     self.torque_override_enabled: bool = False
     self._sp_initialized: bool = False
+    self._prev_lane_centering: bool = False
+    self._prev_blendful: bool = False
 
   def update(self) -> None:
     if self.sunnylink_enabled:
@@ -205,9 +218,26 @@ class UIStateSP:
       self._sp_initialized = True
       self.reset_onroad_sleep_timer()
 
+  def _enforce_lane_centering_blendful(self) -> None:
+    lane_centering = self.params.get_bool("LaneCenteringEnabled")
+    blendful = self.params.get_bool("Blendful")
+    loser = lane_centering_blendful_loser(lane_centering, blendful, self._prev_lane_centering, self._prev_blendful)
+    if loser is not None:
+      self.params.put_bool(loser, False, block=True)
+      if loser == "Blendful":
+        blendful = False
+      else:
+        lane_centering = False
+      # let the Sunnylink page know the other toggle changed too
+      self.params.put("ParamsVersion", str(int(self.params.get("ParamsVersion") or "0") + 1), block=True)
+    self._prev_lane_centering = lane_centering
+    self._prev_blendful = blendful
+
   def _enforce_constraints(self) -> None:
     has_long = self.has_longitudinal_control
     CP = self.CP
+
+    self._enforce_lane_centering_blendful()
 
     if CP is not None:
       if self.params.get_bool("EnforceTorqueControl") and self.params.get_bool("NeuralNetworkLateralControl"):
