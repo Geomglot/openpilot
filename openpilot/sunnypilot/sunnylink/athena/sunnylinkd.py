@@ -249,10 +249,9 @@ def saveParams(params_to_update: dict[str, str], compression: bool = False) -> N
 
   # Increment version counter for frontend change detection
   try:
-    current = int(params.get("ParamsVersion") or "0")
-    params.put("ParamsVersion", str(current + 1), block=True)
-  except Exception:
-    pass
+    params.put("ParamsVersion", (params.get("ParamsVersion") or 0) + 1, block=True)
+  except Exception as e:
+    cloudlog.error(f"sunnylinkd.saveParams.version_bump_failed {e}")
 
 
 def startLocalProxy(global_end_event: threading.Event, remote_ws_uri: str, local_port: int) -> dict[str, int]:
